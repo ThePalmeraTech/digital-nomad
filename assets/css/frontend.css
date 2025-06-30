@@ -1,0 +1,477 @@
+/* =============================================================================
+   PALMERITA SUBSCRIPTIONS - FRONTEND STYLES
+   ========================================================================== */
+
+/* Subscription Buttons Container */
+.palmerita-subscription-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+/* Base Button Styles */
+.palmerita-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  min-width: 180px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.palmerita-btn:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.palmerita-btn:hover:before {
+  left: 100%;
+}
+
+/* CV Button */
+.palmerita-btn-cv {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+}
+
+.palmerita-btn-cv:hover {
+  background: linear-gradient(135deg, #5b5ff1, #7c3aed);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
+}
+
+/* Promo Button */
+.palmerita-btn-promo {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: white;
+}
+
+.palmerita-btn-promo:hover {
+  background: linear-gradient(135deg, #d97706, #dc2626);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
+}
+
+/* Plugin Button */
+.palmerita-btn-plugin {
+  background: linear-gradient(135deg, #1f2937, #6366f1);
+  color: #fff;
+}
+.palmerita-btn-plugin:hover {
+  background: linear-gradient(135deg, #111827, #4f46e5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(31,41,55,0.3);
+}
+
+/* Button Icons */
+.btn-icon {
+  font-size: 1.25rem;
+  display: inline-block;
+}
+
+.btn-text {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* Modal Styles */
+.palmerita-modal {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.3s ease;
+}
+
+.palmerita-modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.palmerita-modal-content {
+  background: white;
+  border-radius: 1rem;
+  max-width: 440px;
+  width: 92%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+  position: relative;
+}
+
+.palmerita-modal-header {
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.palmerita-modal-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.palmerita-modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #6b7280;
+  transition: color 0.2s ease;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.palmerita-modal-close:hover {
+  color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.palmerita-modal-body {
+  padding: 1rem 2rem 2rem;
+}
+
+.palmerita-modal-body p {
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input[type="email"] {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background-color: #f9fafb;
+}
+
+.form-group input[type="email"]:focus {
+  outline: none;
+  border-color: #6366f1;
+  background-color: white;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-group input[type="email"]::placeholder {
+  color: #9ca3af;
+}
+
+/* Form Actions */
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+.palmerita-btn-submit {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  padding: 0.75rem 2rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.palmerita-btn-submit:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.palmerita-btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.palmerita-btn-cancel {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.palmerita-btn-cancel:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* Loading State */
+.btn-loading {
+  animation: spin 1s linear infinite;
+}
+
+/* Success/Error Messages */
+.palmerita-message {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.palmerita-message.success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.palmerita-message.error {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (min-width: 768px) {
+  /* Medium+ screens: keep modal compact */
+  .palmerita-modal-content {
+    max-width: 480px; /* design system card width */
+    width: auto;
+  }
+}
+
+@media (min-width: 1200px) {
+  /* Large screens: allow slightly wider but never full width */
+  .palmerita-modal-content {
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 640px) {
+  .palmerita-subscription-buttons {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .palmerita-btn {
+    width: 100%;
+    max-width: 280px;
+    padding: 1rem 1.5rem;
+  }
+  
+  .palmerita-modal-content {
+    width: 98%;
+    margin: 1rem;
+  }
+  
+  .palmerita-modal-header {
+    padding: 1.5rem 1.5rem 1rem;
+  }
+  
+  .palmerita-modal-body {
+    padding: 1rem 1.5rem 1.5rem;
+  }
+  
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+  
+  .palmerita-btn-submit,
+  .palmerita-btn-cancel {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .palmerita-modal-header h3 {
+    font-size: 1.25rem;
+  }
+  
+  .palmerita-btn {
+    font-size: 0.9rem;
+    padding: 0.875rem 1.25rem;
+  }
+}
+
+/* Integration with Palmerita Theme */
+.palmerita-subscription-buttons[data-style="hero"] {
+  margin: 3rem 0;
+}
+
+.palmerita-subscription-buttons[data-style="hero"] .palmerita-btn {
+  font-size: 1.125rem;
+  padding: 1.25rem 2.5rem;
+  min-width: 200px;
+}
+
+.palmerita-subscription-buttons[data-style="sidebar"] {
+  flex-direction: column;
+  position: sticky;
+  top: 2rem;
+}
+
+.palmerita-subscription-buttons[data-style="sidebar"] .palmerita-btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .palmerita-modal-content {
+    background: #1f2937;
+    color: white;
+  }
+  
+  .palmerita-modal-header {
+    border-bottom-color: #374151;
+  }
+  
+  .palmerita-modal-header h3 {
+    color: white;
+  }
+  
+  .palmerita-modal-body p {
+    color: #d1d5db;
+  }
+  
+  .form-group label {
+    color: #e5e7eb;
+  }
+  
+  .form-group input[type="email"] {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: white;
+  }
+  
+  .form-group input[type="email"]:focus {
+    background-color: #4b5563;
+    border-color: #6366f1;
+  }
+}
+
+/* Modern Button Variants */
+.palmerita-btn--gradient {
+  background: linear-gradient(90deg, #6366f1 0%, #111111 100%);
+  color: #fff;
+}
+.palmerita-btn--gradient:hover,
+.palmerita-btn--gradient:focus {
+  background: linear-gradient(90deg, #6366f1 0%, #000 100%);
+  box-shadow: 0 4px 24px 0 rgba(99,102,241,0.18);
+  color: #fff;
+}
+
+.palmerita-btn--minimal {
+  background: #fff;
+  color: #6366f1;
+  border: 2px solid #6366f1;
+}
+.palmerita-btn--minimal:hover,
+.palmerita-btn--minimal:focus {
+  background: #6366f1;
+  color: #fff;
+  border-color: #6366f1;
+}
+
+.palmerita-btn--default {
+  background: #111;
+  color: #fff;
+}
+.palmerita-btn--default:hover,
+.palmerita-btn--default:focus {
+  background: #6366f1;
+  color: #fff;
+}
+
+.palmerita-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.palmerita-btn svg {
+  margin-right: 0.7em;
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: middle;
+  fill: currentColor;
+} 
