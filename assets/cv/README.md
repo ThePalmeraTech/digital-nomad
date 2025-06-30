@@ -4,13 +4,13 @@ This directory contains the CV file that will be downloaded by users.
 
 ## Setup Instructions
 
-1. Add your CV file here as `Hanaley-Palma-CV.pdf`
+1. Add your CV file here as `Your-name-CV.pdf`
 2. Make sure the file is accessible and has proper permissions
 3. The download system will automatically serve this file to authorized users
 
 ## File Requirements
 
-- **Filename**: `Hanaley-Palma-CV.pdf`
+- **Filename**: `You-name-CV.pdf`
 - **Format**: PDF (recommended)
 - **Size**: Keep under 5MB for faster downloads
 - **Content**: Make sure it's your latest professional CV
