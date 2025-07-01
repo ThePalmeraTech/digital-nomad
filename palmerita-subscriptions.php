@@ -68,6 +68,7 @@ class PalmeritaSubscriptions {
     private function __construct() {
         // Defer initialization to a hook
         add_action('plugins_loaded', array($this, 'init'));
+        add_action('wp_ajax_palmerita_restore_template', array($this, 'ajax_restore_template'));
     }
     
     /**
@@ -102,11 +103,19 @@ class PalmeritaSubscriptions {
         
         // Handle CSV exports early to avoid header already sent issues
         add_action('admin_init', array($this, 'maybe_export_csv'));
+        add_action('admin_init', array($this, 'maybe_update_database'));
         
         // Hook PHPMailer to send via custom SMTP if configured
         add_action('phpmailer_init', array($this, 'configure_phpmailer'));
 
         add_action('wp_ajax_palmerita_send_test_email', array($this, 'send_test_email'));
+
+        add_action('palmerita_log_email_delivery', function($type, $to, $subject, $success, $error = '') {
+            if (method_exists('PalmeritaSubscriptions', 'get_instance')) {
+                $plugin = PalmeritaSubscriptions::get_instance();
+                $plugin->log_email_delivery($type, $to, $subject, $success, $error);
+            }
+        }, 10, 5);
     }
     
     /**
@@ -188,6 +197,20 @@ class PalmeritaSubscriptions {
             );
             }
         }
+
+        if($hook === 'subscriptions_page_palmerita-email-templates'){
+            wp_enqueue_code_editor(array('type'=>'text/html'));
+            wp_enqueue_script('palmerita-email-templates', PALMERITA_SUBS_PLUGIN_URL.'assets/js/email-templates.js', array('jquery','code-editor'), '1.0', true);
+            wp_enqueue_style('palmerita-email-templates', PALMERITA_SUBS_PLUGIN_URL.'assets/css/email-templates.css', array(), '1.0');
+            // Pasar textos a JS
+            $help_msg = get_option('palmerita_email_settings',array())['subscriber_help'] ?? __('P.S. Can\'t find our email? Check your Spam or Promotions folder and drag it to your Inbox so you never miss future gifts or updates.','palmerita-subscriptions');
+            wp_localize_script('palmerita-email-templates','EmailTemplates',array(
+                'i18n'=>array(
+                    'defaultTemplate'=>__('This email will use the default built-in template.','palmerita-subscriptions'),
+                    'helpMsg'=>$help_msg
+                )
+            ));
+        }
     }
     
     /**
@@ -220,6 +243,15 @@ class PalmeritaSubscriptions {
             'manage_options',
             'palmerita-promo-list',
             array($this, 'promo_list_page')
+        );
+        
+        add_submenu_page(
+            'palmerita-subscriptions',
+            __('File Downloads', 'palmerita-subscriptions'),
+            __('File Downloads', 'palmerita-subscriptions'),
+            'manage_options',
+            'palmerita-file-list',
+            array($this, 'file_list_page')
         );
         
         add_submenu_page(
@@ -268,6 +300,49 @@ class PalmeritaSubscriptions {
             'manage_options',
             'palmerita-modal-copy',
             array($this, 'modal_copy_page')
+        );
+        
+        // Link Analytics
+        add_submenu_page(
+            'palmerita-subscriptions',
+            __('Link Analytics', 'palmerita-subscriptions'),
+            __('Link Analytics', 'palmerita-subscriptions'),
+            'manage_options',
+            'palmerita-link-analytics',
+            array($this, 'link_analytics_page')
+        );
+        
+        // Database Upgrade (only show if upgrade is needed)
+        $tracking_version = get_option('palmerita_tracking_version', '0');
+        if (version_compare($tracking_version, '1.1.0', '<')) {
+            add_submenu_page(
+                'palmerita-subscriptions',
+                __('Upgrade Tracking', 'palmerita-subscriptions'),
+                __('🔄 Upgrade Tracking', 'palmerita-subscriptions'),
+                'manage_options',
+                'palmerita-upgrade-tracking',
+                array($this, 'upgrade_tracking_page')
+            );
+        }
+
+        // Email Templates editor
+        add_submenu_page(
+            'palmerita-subscriptions',
+            __('Email Templates', 'palmerita-subscriptions'),
+            __('Email Templates', 'palmerita-subscriptions'),
+            'manage_options',
+            'palmerita-email-templates',
+            array($this, 'email_templates_page')
+        );
+
+        // Email Log
+        add_submenu_page(
+            'palmerita-subscriptions',
+            __('Email Log', 'palmerita-subscriptions'),
+            __('Email Log', 'palmerita-subscriptions'),
+            'manage_options',
+            'palmerita-email-log',
+            array($this, 'email_log_page')
         );
     }
     
@@ -345,28 +420,69 @@ class PalmeritaSubscriptions {
                 $download_url = PalmeritaDownloadManager::generate_download_link($email, $subscription_id);
                 
                 if ($download_url) {
+                    error_log("Palmerita: Generated CV download URL for {$email}: {$download_url}");
+                    
+                    // Add wp_mail error logging temporarily
+                    add_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+                    
                     $email_sent = PalmeritaDownloadManager::send_download_email($email, $download_url);
+                    
+                    remove_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+                    
                     if (!$email_sent) {
-                        error_log('Palmerita: Failed to send CV email to ' . $email);
+                        error_log('Palmerita: CRITICAL - Failed to send CV email to ' . $email . '. Check SMTP configuration.');
                         // Still return success to user, but log the error
+                    } else {
+                        error_log('Palmerita: CV email sent successfully to ' . $email);
                     }
+                } else {
+                    error_log('Palmerita: CRITICAL - Failed to generate download URL for ' . $email);
                 }
             } elseif ($type === 'plugin') {
                 $subscription_id = $result;
                 $download_url = PalmeritaDownloadManager::generate_download_link($email, $subscription_id);
                 if ($download_url) {
+                    error_log("Palmerita: Generated plugin download URL for {$email}: {$download_url}");
+                    
+                    // Add wp_mail error logging temporarily
+                    add_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+                    
                     $email_sent = PalmeritaDownloadManager::send_zip_email($email, $download_url);
+                    
+                    remove_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+                    
                     if (!$email_sent) {
-                        error_log('Palmerita: Failed to send plugin email to ' . $email);
+                        error_log('Palmerita: CRITICAL - Failed to send plugin email to ' . $email . '. Check SMTP configuration.');
                         // Still return success to user, but log the error
+                    } else {
+                        error_log('Palmerita: Plugin email sent successfully to ' . $email);
                     }
+                } else {
+                    error_log('Palmerita: CRITICAL - Failed to generate download URL for ' . $email);
+                }
+            } elseif ($type === 'promo') {
+                // Send welcome email to promotion subscribers
+                error_log("Palmerita: Sending promo welcome email to {$email}");
+                
+                // Add wp_mail error logging temporarily
+                add_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+                
+                $email_sent = PalmeritaDownloadManager::send_promo_welcome_email($email);
+                
+                remove_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+                
+                if (!$email_sent) {
+                    error_log('Palmerita: CRITICAL - Failed to send promo welcome email to ' . $email . '. Check SMTP configuration.');
+                    // Still return success to user, but log the error
+                } else {
+                    error_log('Palmerita: Promo welcome email sent successfully to ' . $email);
                 }
             }
             
             wp_send_json_success(array(
                 'message' => $type === 'cv' ? 
                     __('Thank you! We have sent a secure viewing link to your email address. You can view and download my CV directly in your browser. Please check your spam folder if you don\'t see it in your inbox.', 'palmerita-subscriptions') :
-                    ($type === 'promo' ? __('Excellent! We will keep you informed about our promotions.', 'palmerita-subscriptions') : __('Thank you! We have emailed you the download link for the plugin.', 'palmerita-subscriptions'))
+                    ($type === 'promo' ? __('Awesome! I\'ve sent you a welcome email with all the details. You\'re now part of my inner circle and will be the first to know about exciting updates!', 'palmerita-subscriptions') : __('Thank you! We have emailed you the download link for the plugin.', 'palmerita-subscriptions'))
             ));
         } else {
             wp_send_json_error(__('Error saving subscription', 'palmerita-subscriptions'));
@@ -517,6 +633,27 @@ class PalmeritaSubscriptions {
     }
     
     /**
+     * File downloads list admin page
+     */
+    public function file_list_page() {
+        include PALMERITA_SUBS_PLUGIN_DIR . 'admin/file-list.php';
+    }
+    
+    /**
+     * Link analytics admin page
+     */
+    public function link_analytics_page() {
+        include PALMERITA_SUBS_PLUGIN_DIR . 'admin/link-analytics.php';
+    }
+    
+    /**
+     * Database upgrade admin page
+     */
+    public function upgrade_tracking_page() {
+        include PALMERITA_SUBS_PLUGIN_DIR . 'admin/upgrade-tracking.php';
+    }
+    
+    /**
      * Terms & Conditions admin page
      */
     public function terms_page() {
@@ -534,63 +671,293 @@ class PalmeritaSubscriptions {
      * File manager page (upload ZIP)
      */
     public function plugin_manager_page() {
-        // Handle upload
-        if (isset($_POST['pal_zip_upload_nonce']) && wp_verify_nonce($_POST['pal_zip_upload_nonce'], 'pal_zip_upload')) {
-            if (!empty($_FILES['plugin_zip']['name'])) {
-                $file = $_FILES['plugin_zip'];
-                $is_zip = false;
-                // Allow common ZIP mime types
-                if (!empty($file['type']) && strpos($file['type'], 'zip') !== false) {
-                    $is_zip = true;
-                }
-                // Fallback: validate by extension if mime not reliable
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                if ($ext === 'zip') {
-                    $is_zip = true;
-                }
-
-                if ($is_zip) {
-                    require_once ABSPATH . 'wp-admin/includes/file.php';
-                    $overrides = array('test_form' => false);
-                    $movefile  = wp_handle_upload($file, $overrides);
-                    if ($movefile && empty($movefile['error'])) {
-                        update_option('palmerita_plugin_zip_url', $movefile['url']);
-                        echo '<div class="notice notice-success is-dismissible"><p>' . __('ZIP uploaded successfully.', 'palmerita-subscriptions') . '</p></div>';
-                    } else {
-                        echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($movefile['error']) . '</p></div>';
+        // Handle file deletion
+        if (isset($_POST['delete_file_nonce']) && wp_verify_nonce($_POST['delete_file_nonce'], 'delete_file')) {
+            $current_file_url = get_option('palmerita_file_zip_url');
+            if ($current_file_url) {
+                // Delete physical file from files directory
+                $upload_dir = wp_upload_dir();
+                $files_url = $upload_dir['baseurl'] . '/files';
+                
+                if (strpos($current_file_url, $files_url) !== false) {
+                    $file_path = str_replace($files_url, $upload_dir['basedir'] . '/files', $current_file_url);
+                    if (file_exists($file_path)) {
+                        wp_delete_file($file_path);
                     }
-                } else {
-                    echo '<div class="notice notice-error is-dismissible"><p>' . __('Please upload a valid .zip file.', 'palmerita-subscriptions') . '</p></div>';
                 }
+                // Clear both options
+                delete_option('palmerita_file_zip_url');
+                delete_option('palmerita_plugin_zip_url');
+                delete_option('palmerita_file_upload_date');
+                delete_option('palmerita_file_original_name');
+                echo '<div class="notice notice-success is-dismissible"><p>' . __('File deleted successfully.', 'palmerita-subscriptions') . '</p></div>';
             }
         }
 
-        $current_url = esc_url($this->get_plugin_zip_url());
+        // Handle file upload/replacement
+        if (isset($_POST['upload_file_nonce']) && wp_verify_nonce($_POST['upload_file_nonce'], 'upload_file')) {
+            if (!empty($_FILES['new_file']['name'])) {
+                $file = $_FILES['new_file'];
+                
+                // Validate file type
+                $allowed_types = array('zip', 'pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png');
+                $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                
+                if (!in_array($file_ext, $allowed_types)) {
+                    echo '<div class="notice notice-error is-dismissible"><p>' . 
+                         sprintf(__('Invalid file type. Allowed: %s', 'palmerita-subscriptions'), implode(', ', $allowed_types)) . 
+                         '</p></div>';
+                } else {
+                    // Delete old file first from files directory
+                    $old_file_url = get_option('palmerita_file_zip_url');
+                    if ($old_file_url) {
+                        $upload_dir = wp_upload_dir();
+                        $files_url = $upload_dir['baseurl'] . '/files';
+                        
+                        if (strpos($old_file_url, $files_url) !== false) {
+                            $old_file_path = str_replace($files_url, $upload_dir['basedir'] . '/files', $old_file_url);
+                            if (file_exists($old_file_path)) {
+                                wp_delete_file($old_file_path);
+                            }
+                        }
+                    }
+
+                    // Create files directory if it doesn't exist
+                    $upload_dir = wp_upload_dir();
+                    $files_dir = $upload_dir['basedir'] . '/files';
+                    $files_url = $upload_dir['baseurl'] . '/files';
+                    
+                    if (!file_exists($files_dir)) {
+                        wp_mkdir_p($files_dir);
+                    }
+
+                    // Upload new file to files directory
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                    $overrides = array(
+                        'test_form' => false,
+                        'upload_path' => $files_dir,
+                        'unique_filename_callback' => function($dir, $name, $ext) {
+                            // Force unique filename with timestamp
+                            $timestamp = current_time('timestamp');
+                            $clean_name = sanitize_file_name(pathinfo($name, PATHINFO_FILENAME));
+                            return $clean_name . '_' . $timestamp . $ext;
+                        }
+                    );
+                    
+                    // Temporarily change upload directory
+                    add_filter('upload_dir', function($dirs) use ($files_dir, $files_url) {
+                        $dirs['path'] = $files_dir;
+                        $dirs['url'] = $files_url;
+                        $dirs['subdir'] = '/files';
+                        return $dirs;
+                    });
+                    
+                    $movefile = wp_handle_upload($file, $overrides);
+                    
+                    // Remove the upload directory filter
+                    remove_all_filters('upload_dir');
+                    
+                    if ($movefile && empty($movefile['error'])) {
+                        // Store the new file URL in both options for compatibility
+                        update_option('palmerita_file_zip_url', $movefile['url']);
+                        update_option('palmerita_plugin_zip_url', $movefile['url']);
+                        
+                        // Store additional metadata
+                        update_option('palmerita_file_upload_date', current_time('mysql'));
+                        update_option('palmerita_file_original_name', $file['name']);
+                        
+                        echo '<div class="notice notice-success is-dismissible"><p>' . 
+                             sprintf(__('File "%s" uploaded successfully!', 'palmerita-subscriptions'), $file['name']) . 
+                             '</p></div>';
+                    } else {
+                        echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($movefile['error']) . '</p></div>';
+                    }
+                    }
+                } else {
+                echo '<div class="notice notice-error is-dismissible"><p>' . __('Please select a file to upload.', 'palmerita-subscriptions') . '</p></div>';
+            }
+        }
+
+        // Get current file info
+        $current_file_url = get_option('palmerita_file_zip_url');
+        $upload_date = get_option('palmerita_file_upload_date');
+        $original_name = get_option('palmerita_file_original_name');
+        
         ?>
         <div class="wrap">
             <h1><?php _e('File Manager', 'palmerita-subscriptions'); ?></h1>
-            <p><?php _e('Upload a ZIP package to share via the subscription form. The file will be served securely with expiring links.', 'palmerita-subscriptions'); ?></p>
+            <p><?php _e('Upload and manage the file that users will receive via secure download links.', 'palmerita-subscriptions'); ?></p>
 
-            <table class="form-table" role="presentation"><tbody>
-                <tr>
-                    <th scope="row"><?php _e('Current ZIP', 'palmerita-subscriptions'); ?></th>
-                    <td>
-                        <?php if ($current_url) : ?>
-                            <a href="<?php echo $current_url; ?>" target="_blank"><?php echo basename($current_url); ?></a>
-                        <?php else : ?>
-                            <?php _e('No ZIP uploaded yet.', 'palmerita-subscriptions'); ?>
-                        <?php endif; ?>
+            <?php if ($current_file_url): ?>
+                <!-- Current File Section -->
+                <div class="file-manager-current">
+                    <h2><?php _e('Current File', 'palmerita-subscriptions'); ?></h2>
+                    <div class="current-file-card">
+                        <div class="file-info">
+                            <div class="file-icon">📁</div>
+                            <div class="file-details">
+                                <h3><?php echo esc_html($original_name ?: basename($current_file_url)); ?></h3>
+                                <p><strong><?php _e('URL:', 'palmerita-subscriptions'); ?></strong> 
+                                   <a href="<?php echo esc_url($current_file_url); ?>" target="_blank"><?php echo esc_html(basename($current_file_url)); ?></a>
+                                </p>
+                                <?php if ($upload_date): ?>
+                                    <p><strong><?php _e('Uploaded:', 'palmerita-subscriptions'); ?></strong> 
+                                       <?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($upload_date))); ?>
+                                    </p>
+                                <?php endif; ?>
+                                <p><strong><?php _e('File Size:', 'palmerita-subscriptions'); ?></strong> 
+                                   <?php 
+                                   $upload_dir = wp_upload_dir();
+                                   $files_url = $upload_dir['baseurl'] . '/files';
+                                   
+                                   if (strpos($current_file_url, $files_url) !== false) {
+                                       $file_path = str_replace($files_url, $upload_dir['basedir'] . '/files', $current_file_url);
+                                       if (file_exists($file_path)) {
+                                           echo size_format(filesize($file_path));
+                                       } else {
+                                           echo '<span style="color: red;">' . __('File not found on server', 'palmerita-subscriptions') . '</span>';
+                                       }
+                                   } else {
+                                       echo '<span style="color: orange;">' . __('File not in files directory', 'palmerita-subscriptions') . '</span>';
+                                   }
+                                   ?>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="file-actions">
+                            <a href="<?php echo esc_url($current_file_url); ?>" class="button button-secondary" target="_blank">
+                                👁️ <?php _e('Preview/Download', 'palmerita-subscriptions'); ?>
+                            </a>
+                            <form method="post" style="display: inline;" onsubmit="return confirm('<?php _e('Are you sure you want to delete this file? This action cannot be undone.', 'palmerita-subscriptions'); ?>')">
+                                <?php wp_nonce_field('delete_file', 'delete_file_nonce'); ?>
+                                <button type="submit" class="button button-link-delete">
+                                    🗑️ <?php _e('Delete File', 'palmerita-subscriptions'); ?>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="margin: 30px 0;">
+
+                <!-- Replace File Section -->
+                <h2><?php _e('Replace Current File', 'palmerita-subscriptions'); ?></h2>
+                <div class="upload-notice">
+                    <p><strong><?php _e('Note:', 'palmerita-subscriptions'); ?></strong> <?php _e('Uploading a new file will automatically delete the current file and update all future download links.', 'palmerita-subscriptions'); ?></p>
+                </div>
+            <?php else: ?>
+                <!-- No File Section -->
+                <div class="no-file-notice">
+                    <div class="notice notice-warning">
+                        <p><strong><?php _e('No file uploaded yet.', 'palmerita-subscriptions'); ?></strong></p>
+                        <p><?php _e('Upload a file below to start sharing it via secure download links.', 'palmerita-subscriptions'); ?></p>
+                    </div>
+                </div>
+                <h2><?php _e('Upload File', 'palmerita-subscriptions'); ?></h2>
+            <?php endif; ?>
+
+            <!-- Upload Form -->
+            <form method="post" enctype="multipart/form-data" class="upload-form">
+                <?php wp_nonce_field('upload_file', 'upload_file_nonce'); ?>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Select File', 'palmerita-subscriptions'); ?></th>
+                        <td>
+                            <input type="file" name="new_file" id="new_file" accept=".zip,.pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" required />
+                            <p class="description">
+                                <?php _e('Allowed file types: ZIP, PDF, DOC, DOCX, TXT, JPG, JPEG, PNG', 'palmerita-subscriptions'); ?>
+                                <br><?php _e('Maximum file size:', 'palmerita-subscriptions'); ?> <?php echo size_format(wp_max_upload_size()); ?>
+                            </p>
                     </td>
                 </tr>
-            </tbody></table>
-
-            <h2><?php _e('Upload New ZIP', 'palmerita-subscriptions'); ?></h2>
-            <form method="post" enctype="multipart/form-data">
-                <?php wp_nonce_field('pal_zip_upload', 'pal_zip_upload_nonce'); ?>
-                <input type="file" name="plugin_zip" accept=".zip" required />
-                <?php submit_button(__('Upload', 'palmerita-subscriptions')); ?>
+                </table>
+                <?php submit_button($current_file_url ? __('Replace File', 'palmerita-subscriptions') : __('Upload File', 'palmerita-subscriptions'), 'primary', 'submit', false); ?>
             </form>
+
+            <!-- Help Section -->
+            <div class="file-manager-help">
+                <h3><?php _e('How it works', 'palmerita-subscriptions'); ?></h3>
+                <ul>
+                    <li><?php _e('Users request the file using the download button on your website', 'palmerita-subscriptions'); ?></li>
+                    <li><?php _e('They receive a secure email with a unique download link', 'palmerita-subscriptions'); ?></li>
+                    <li><?php _e('The link expires after 7 days and allows up to 3 downloads', 'palmerita-subscriptions'); ?></li>
+                    <li><?php _e('All download activity is tracked in the Link Analytics section', 'palmerita-subscriptions'); ?></li>
+                </ul>
         </div>
+        </div>
+
+        <style>
+        .file-manager-current {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .current-file-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: white;
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid #e1e5e9;
+        }
+        .file-info {
+            display: flex;
+            align-items: flex-start;
+            flex: 1;
+        }
+        .file-icon {
+            font-size: 48px;
+            margin-right: 20px;
+            opacity: 0.7;
+        }
+        .file-details h3 {
+            margin: 0 0 10px 0;
+            color: #23282d;
+        }
+        .file-details p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .file-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-left: 20px;
+        }
+        .upload-form {
+            background: white;
+            border: 1px solid #ccd0d4;
+            border-radius: 6px;
+            padding: 20px;
+        }
+        .upload-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .no-file-notice {
+            margin: 20px 0;
+        }
+        .file-manager-help {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f1f1f1;
+            border-radius: 6px;
+        }
+        .file-manager-help ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .file-manager-help li {
+            margin: 8px 0;
+            color: #555;
+        }
+        </style>
         <?php
     }
     
@@ -598,8 +965,33 @@ class PalmeritaSubscriptions {
      * Helper: current plugin ZIP URL
      */
     private function get_plugin_zip_url() {
+        // Priorizar la opción consistente con la plantilla
+        $stored = get_option('palmerita_file_zip_url');
+        if (!$stored) {
         $stored = get_option('palmerita_plugin_zip_url');
-        if ($stored) return $stored;
+        }
+        
+        // If we have a stored URL, make sure it's in the files directory
+        if ($stored) {
+            $upload_dir = wp_upload_dir();
+            $files_url = $upload_dir['baseurl'] . '/files';
+            
+            // If the stored URL is not in files directory, check if file exists there
+            if (strpos($stored, '/files/') === false) {
+                $filename = basename($stored);
+                $files_file_url = $files_url . '/' . $filename;
+                $files_file_path = $upload_dir['basedir'] . '/files/' . $filename;
+                
+                if (file_exists($files_file_path)) {
+                    // Update the stored URL to point to files directory
+                    update_option('palmerita_file_zip_url', $files_file_url);
+                    update_option('palmerita_plugin_zip_url', $files_file_url);
+                    return $files_file_url;
+                }
+            }
+            return $stored;
+        }
+        
         return PALMERITA_SUBS_PLUGIN_URL . 'assets/zip/palmerita-subscriptions.zip';
     }
     
@@ -630,6 +1022,13 @@ class PalmeritaSubscriptions {
             'index.php?palmerita_plugin_download=1&download_token=$matches[1]',
             'top'
         );
+        
+        // Track link clicks before redirecting to actual content
+        add_rewrite_rule(
+            '^palmerita-track/([^/]+)/?$',
+            'index.php?palmerita_track=1&track_token=$matches[1]',
+            'top'
+        );
     }
     
     /**
@@ -643,6 +1042,8 @@ class PalmeritaSubscriptions {
         $vars[] = 'palmerita_cv_viewer';
         $vars[] = 'viewer_token';
         $vars[] = 'palmerita_plugin_download';
+        $vars[] = 'palmerita_track';
+        $vars[] = 'track_token';
         return $vars;
     }
     
@@ -667,6 +1068,11 @@ class PalmeritaSubscriptions {
 
         if (get_query_var('palmerita_plugin_download')) {
             include PALMERITA_SUBS_PLUGIN_DIR . 'templates/plugin-download-page.php';
+            exit;
+        }
+        
+        if (get_query_var('palmerita_track')) {
+            $this->handle_track_click();
             exit;
         }
     }
@@ -731,167 +1137,173 @@ class PalmeritaSubscriptions {
             background: #0056b3;
             color: white;
         }
-        
-        /* Color palette styles */
-        .palmerita-color-palette {
-            margin-top: 16px;
-            padding: 16px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #e1e5e9;
-        }
-        
-        .palmerita-color-palette h5 {
-            margin: 0 0 12px 0;
-            font-size: 13px;
-            color: #1d2327;
-            font-weight: 600;
-        }
-        
-        .palette-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 8px;
-        }
-        
-        .palette-item {
-            cursor: pointer;
-            border-radius: 4px;
-            overflow: hidden;
-            border: 1px solid #ddd;
-            transition: all 0.2s ease;
-        }
-        
-        .palette-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        .palette-item.palette-applied {
-            animation: pulseGreen 0.6s ease;
-        }
-        
-        .palette-preview {
-            padding: 12px 8px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 16px;
-        }
-        
-        .palette-name {
-            display: block;
-            padding: 6px 8px;
-            background: #fff;
-            font-size: 11px;
-            color: #646970;
-            text-align: center;
-        }
-        
-        @keyframes pulseGreen {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
-        }
-        
-        /* Copy/Paste buttons */
-        .color-copy, .color-paste {
-            font-size: 11px !important;
-            padding: 4px 8px !important;
-            height: auto !important;
-            line-height: 1.2 !important;
-        }
-        
-        /* Harmony suggestions */
-        .harmony-suggestions {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 1000;
-            margin-top: 4px;
-        }
-        
-        .harmony-item {
-            cursor: pointer;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .harmony-item:last-child {
-            border-bottom: none;
-        }
-        
-        .harmony-item:hover {
-            background: #f8f9fa;
-        }
-        
-        .harmony-preview {
-            padding: 8px 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        /* Notifications */
-        .palmerita-notification {
-            position: fixed;
-            top: 32px;
-            right: 20px;
-            padding: 12px 20px;
-            border-radius: 6px;
-            font-weight: 600;
-            z-index: 10000;
-            transform: translateX(100%);
-            opacity: 0;
-            transition: all 0.3s ease;
-        }
-        
-        .palmerita-notification.show {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        
-        .palmerita-notification.success {
-            background: #d1e7dd;
-            color: #0f5132;
-            border: 1px solid #badbcc;
-        }
-        
-        .palmerita-notification.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c2c7;
-        }
-        
-        /* WCAG level indicators */
-        .contrast-indicator[data-wcag-level="AAA"] {
-            border-left: 4px solid #22c55e;
-        }
-        
-        .contrast-indicator[data-wcag-level="AA"] {
-            border-left: 4px solid #3b82f6;
-        }
-        
-        .contrast-indicator[data-wcag-level="A"] {
-            border-left: 4px solid #f59e0b;
-        }
-        
-        .contrast-indicator[data-wcag-level="FAIL"] {
-            border-left: 4px solid #ef4444;
-        }
         </style>
         <?php
         get_footer();
     }
     
     /**
+     * Handle link click tracking and redirect
+     */
+    private function handle_track_click() {
+        $token = get_query_var('track_token');
+        
+        if (!$token) {
+            wp_die(__('Invalid tracking link', 'palmerita-subscriptions'));
+        }
+        
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'palmerita_downloads';
+        
+        // Get download record
+        $download = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE token = %s",
+            $token
+        ));
+        
+        if (!$download) {
+            wp_die(__('Invalid or non-existent link', 'palmerita-subscriptions'));
+        }
+        
+        // Check if link is still valid
+        if (strtotime($download->expires) < current_time('timestamp')) {
+            wp_die(__('This link has expired. Please request a new one.', 'palmerita-subscriptions'));
+        }
+        
+        // Track the click
+        $user_agent = sanitize_text_field($_SERVER['HTTP_USER_AGENT'] ?? '');
+        $ip_address = $this->get_client_ip();
+        $referrer = sanitize_text_field($_SERVER['HTTP_REFERER'] ?? '');
+        
+        $update_data = array(
+            'click_count' => $download->click_count + 1,
+            'last_clicked' => current_time('mysql'),
+            'user_agent' => $user_agent,
+            'ip_address' => $ip_address,
+            'referrer' => $referrer
+        );
+        
+        // Set first click time if this is the first click
+        if (!$download->clicked) {
+            $update_data['clicked'] = 1;
+            $update_data['first_clicked'] = current_time('mysql');
+        }
+        
+        // Update tracking data
+        $wpdb->update(
+            $table_name,
+            $update_data,
+            array('id' => $download->id),
+            array('%d', '%s', '%s', '%s', '%s', '%d', '%s'),
+            array('%d')
+        );
+        
+        // Log for debugging
+        error_log("Palmerita: Tracked click for token {$token} by {$download->email} from IP {$ip_address}");
+        
+        // Redirect based on subscription type
+        $subscription = $wpdb->get_row($wpdb->prepare(
+            "SELECT type FROM {$wpdb->prefix}palmerita_subscriptions WHERE id = %d",
+            $download->subscription_id
+        ));
+        
+        if ($subscription && $subscription->type === 'plugin') {
+            // Redirect to plugin download page
+            wp_redirect(site_url('/palmerita-plugin-download/' . $token));
+        } else {
+            // Redirect to CV viewer
+            wp_redirect(site_url('/palmerita-cv-viewer/' . $token));
+        }
+        exit;
+        }
+        
+    /**
+     * Get client IP address
+     */
+    private function get_client_ip() {
+        $ip_keys = array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CLIENT_IP', 'REMOTE_ADDR');
+        
+        foreach ($ip_keys as $key) {
+            if (array_key_exists($key, $_SERVER) === true) {
+                $ip = $_SERVER[$key];
+                if (strpos($ip, ',') !== false) {
+                    $ip = explode(',', $ip)[0];
+                }
+                $ip = trim($ip);
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
+            }
+        }
+        
+        return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        }
+        
+    /**
      * Plugin activation
      */
     public function activate() {
         $this->create_database_tables();
         PalmeritaDownloadManager::create_downloads_table();
+        $this->update_database_for_tracking();
         flush_rewrite_rules();
+    }
+    
+    /**
+     * Update database to add tracking fields
+     */
+    private function update_database_for_tracking() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'palmerita_downloads';
+        
+        // Check if tracking columns exist, if not add them
+        $columns = $wpdb->get_col("DESCRIBE $table_name");
+        
+        if (!in_array('clicked', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN clicked tinyint(1) DEFAULT 0");
+        }
+        
+        if (!in_array('first_clicked', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN first_clicked datetime NULL");
+        }
+        
+        if (!in_array('click_count', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN click_count int(11) DEFAULT 0");
+        }
+        
+        if (!in_array('last_clicked', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN last_clicked datetime NULL");
+        }
+        
+        if (!in_array('user_agent', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN user_agent text NULL");
+        }
+        
+        if (!in_array('ip_address', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN ip_address varchar(45) NULL");
+        }
+        
+        if (!in_array('referrer', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN referrer varchar(255) NULL");
+        }
+        
+        // Add indexes for better performance
+        $wpdb->query("ALTER TABLE $table_name ADD INDEX idx_clicked (clicked)");
+        $wpdb->query("ALTER TABLE $table_name ADD INDEX idx_status (status)");
+        
+        error_log('Palmerita: Database updated with tracking fields');
+    }
+    
+    /**
+     * Check if database needs to be updated for tracking
+     */
+    public function maybe_update_database() {
+        $tracking_version = get_option('palmerita_tracking_version', '0');
+        
+        if (version_compare($tracking_version, '1.1.0', '<')) {
+            $this->update_database_for_tracking();
+            update_option('palmerita_tracking_version', '1.1.0');
+        }
     }
     
     /**
@@ -1063,13 +1475,13 @@ class PalmeritaSubscriptions {
         }
 
         $page = sanitize_text_field($_GET['page']);
-        if (!in_array($page, ['palmerita-cv-list', 'palmerita-promo-list'], true)) {
+        if (!in_array($page, ['palmerita-cv-list', 'palmerita-promo-list', 'palmerita-file-list'], true)) {
             return;
         }
 
         // Determine nonce action and subscription type based on page
-        $nonce_action   = $page === 'palmerita-cv-list' ? 'export_cv' : 'export_promo';
-        $subscription_type = $page === 'palmerita-cv-list' ? 'cv' : 'promo';
+        $nonce_action   = $page === 'palmerita-cv-list' ? 'export_cv' : ($page === 'palmerita-file-list' ? 'export_file' : 'export_promo');
+        $subscription_type = $page === 'palmerita-cv-list' ? 'cv' : ($page === 'palmerita-file-list' ? 'plugin' : 'promo');
 
         // Verify nonce
         if (empty($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], $nonce_action)) {
@@ -1091,8 +1503,9 @@ class PalmeritaSubscriptions {
         }
 
         // Send headers for CSV download
+        $filename_prefix = $subscription_type === 'plugin' ? 'file-downloads' : $subscription_type . '-subscriptions';
         header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $subscription_type . '-subscriptions-' . date('Y-m-d') . '.csv"');
+        header('Content-Disposition: attachment; filename="' . $filename_prefix . '-' . date('Y-m-d') . '.csv"');
         header('Pragma: no-cache');
         header('Expires: 0');
 
@@ -1151,11 +1564,12 @@ class PalmeritaSubscriptions {
         $phpmailer->SMTPTimeout = 30;
 
         // Disable SSL verification if needed (not recommended for production)
+        $allow_self_signed = !empty($settings['smtp_allow_self_signed']);
         $phpmailer->SMTPOptions = array(
             'ssl' => array(
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true
+                'verify_peer' => !$allow_self_signed,
+                'verify_peer_name' => !$allow_self_signed,
+                'allow_self_signed' => $allow_self_signed
             )
         );
 
@@ -1164,7 +1578,7 @@ class PalmeritaSubscriptions {
         }
 
         // Log configuration for debugging
-        error_log("Palmerita SMTP: Configuring SMTP with host: {$phpmailer->Host}, port: {$phpmailer->Port}, encryption: {$phpmailer->SMTPSecure}");
+        error_log("Palmerita SMTP: Configuring SMTP with host: {$phpmailer->Host}, port: {$phpmailer->Port}, encryption: {$phpmailer->SMTPSecure}, username: {$phpmailer->Username}");
     }
     
     /**
@@ -1183,21 +1597,31 @@ class PalmeritaSubscriptions {
                 'password'    => $_POST['password'] ?? '',
                 'from_email'  => sanitize_email($_POST['from_email'] ?? ''),
                 'from_name'   => sanitize_text_field($_POST['from_name'] ?? ''),
+                'smtp_allow_self_signed' => isset($_POST['smtp_allow_self_signed']) ? 1 : 0,
                 'recaptcha_enabled'   => isset($_POST['recaptcha_enabled']) ? 1 : 0,
                 'recaptcha_site_key'  => sanitize_text_field($_POST['recaptcha_site_key'] ?? ''),
                 'recaptcha_secret'    => sanitize_text_field($_POST['recaptcha_secret'] ?? ''),
                 'recaptcha_threshold' => floatval($_POST['recaptcha_threshold'] ?? 0.3),
+                'subscriber_help' => sanitize_textarea_field($_POST['subscriber_help'] ?? ''),
             );
             update_option('palmerita_email_settings', $new_settings);
             echo '<div class="notice notice-success is-dismissible"><p>' . __('Settings saved.', 'palmerita-subscriptions') . '</p></div>';
         }
 
         $settings = get_option('palmerita_email_settings', array());
+        $site_domain = parse_url(home_url(), PHP_URL_HOST);
+        $from_email = $settings['from_email'] ?? '';
+        $from_domain = substr(strrchr($from_email, '@'), 1);
+        $domain_warning = '';
+        if ($from_email && $from_domain && stripos($site_domain, $from_domain) === false) {
+            $domain_warning = '<div class="notice notice-warning"><p><strong>Advertencia:</strong> El correo del remitente no coincide con el dominio del sitio ('.$from_domain.' vs '.$site_domain.'). Esto puede afectar la entregabilidad y causar que los emails lleguen a spam.</p></div>';
+        }
 
         // Simple form UI
         ?>
         <div class="wrap">
             <h1><?php _e('Email / SMTP Settings', 'palmerita-subscriptions'); ?></h1>
+            <?php if($domain_warning) echo $domain_warning; ?>
             <form method="post" action="">
                 <?php wp_nonce_field('save_email_settings', 'palmerita_email_settings_nonce'); ?>
 
@@ -1259,6 +1683,15 @@ class PalmeritaSubscriptions {
                             <td><input type="text" name="from_name" id="from_name" class="regular-text" value="<?php echo esc_attr($settings['from_name'] ?? ''); ?>" /></td>
                         </tr>
 
+                        <!-- Subscriber Help Message -->
+                        <tr>
+                            <th scope="row"><label for="subscriber_help"><?php _e('Subscriber Help Message', 'palmerita-subscriptions'); ?></label></th>
+                            <td>
+                                <textarea name="subscriber_help" id="subscriber_help" class="large-text" rows="3" placeholder="<?php esc_attr_e('e.g. Can\'t find our email? Check your Spam or Promotions folder and move it to Inbox so you never miss our gifts!', 'palmerita-subscriptions'); ?>"><?php echo esc_textarea($settings['subscriber_help'] ?? ''); ?></textarea>
+                                <p class="description"><?php _e('This message is appended to all outgoing emails. Use it to ask subscribers to check their Spam/Promotions folder and drag the message to Inbox.', 'palmerita-subscriptions'); ?></p>
+                            </td>
+                        </tr>
+
                         <!-- reCAPTCHA settings -->
                         <tr><th><hr/></th><td></td></tr>
                         <tr>
@@ -1277,6 +1710,11 @@ class PalmeritaSubscriptions {
                             <th scope="row"><label for="recaptcha_threshold">Score Threshold (0-1)</label></th>
                             <td><input type="number" step="0.1" min="0" max="1" name="recaptcha_threshold" id="recaptcha_threshold" value="<?php echo esc_attr($settings['recaptcha_threshold'] ?? '0.3'); ?>" /></td>
                         </tr>
+                        <tr>
+                            <th scope="row"><label for="smtp_allow_self_signed">Permitir certificados autofirmados/inseguros</label></th>
+                            <td><input type="checkbox" name="smtp_allow_self_signed" id="smtp_allow_self_signed" value="1" <?php checked($settings['smtp_allow_self_signed'] ?? 0, 1); ?> />
+                            <p class="description">Solo para pruebas locales. ¡No usar en producción!</p></td>
+                        </tr>
                     </tbody>
                 </table>
 
@@ -1289,6 +1727,17 @@ class PalmeritaSubscriptions {
             <input type="email" id="palmerita_test_email" value="<?php echo esc_attr(wp_get_current_user()->user_email); ?>" class="regular-text" />
             <button class="button button-secondary" id="palmerita_send_test_btn"><?php _e('Send Test', 'palmerita-subscriptions'); ?></button>
             <span id="palmerita_test_result" style="margin-left:1em;"></span>
+        </div>
+
+        <div class="notice notice-info" style="margin-top:20px;">
+            <p><strong><?php _e('Anti-Spam Best Practices', 'palmerita-subscriptions'); ?></strong></p>
+            <ul style="list-style:disc;padding-left:20px;">
+                <li><?php _e('Use a personal, conversational subject line – avoid words like "Download", "Free", "Urgent".', 'palmerita-subscriptions'); ?></li>
+                <li><?php _e('Keep the body short, friendly and human – minimise links and commercial jargon.', 'palmerita-subscriptions'); ?></li>
+                <li><?php _e('Make sure your "From Email" matches the authenticated SMTP domain.', 'palmerita-subscriptions'); ?></li>
+                <li><?php _e('Ask subscribers to check their Spam/Promotions folder and move the message to Inbox.', 'palmerita-subscriptions'); ?></li>
+                <li><?php _e('Authenticate your domain with SPF, DKIM and DMARC for best deliverability.', 'palmerita-subscriptions'); ?></li>
+            </ul>
         </div>
 
         <script>
@@ -1359,8 +1808,17 @@ class PalmeritaSubscriptions {
 
         remove_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
 
+        $settings = get_option('palmerita_email_settings', array());
+        $site_domain = parse_url(home_url(), PHP_URL_HOST);
+        $from_email = $settings['from_email'] ?? '';
+        $from_domain = substr(strrchr($from_email, '@'), 1);
+        $domain_warning = '';
+        if ($from_email && $from_domain && stripos($site_domain, $from_domain) === false) {
+            $domain_warning = ' <strong>Advertencia:</strong> El correo del remitente no coincide con el dominio del sitio ('.$from_domain.' vs '.$site_domain.'). Esto puede afectar la entregabilidad y causar que los emails lleguen a spam.';
+        }
+
         if ($sent) {
-            wp_send_json_success(__('Test email sent successfully. Please check your inbox.', 'palmerita-subscriptions'));
+            wp_send_json_success(__('Test email sent successfully. Please check your inbox.', 'palmerita-subscriptions') . $domain_warning);
         } else {
             $settings = get_option('palmerita_email_settings', array());
             $error_msg = __('Failed to send test email. Check your SMTP settings.', 'palmerita-subscriptions');
@@ -1377,7 +1835,7 @@ class PalmeritaSubscriptions {
                 $error_msg .= ' Debug info: ' . implode(', ', $debug_info);
             }
             
-            wp_send_json_error($error_msg);
+            wp_send_json_error($error_msg . $domain_warning);
         }
     }
 
@@ -1385,7 +1843,20 @@ class PalmeritaSubscriptions {
      * Log wp_mail errors for debugging
      */
     public function log_wp_mail_error($wp_error) {
-        error_log('WP Mail Error: ' . $wp_error->get_error_message());
+        $error_msg = 'Palmerita WP Mail Error: ' . $wp_error->get_error_message();
+        
+        // Add additional debug info
+        $settings = get_option('palmerita_email_settings', array());
+        if (!empty($settings['enabled'])) {
+            $error_msg .= ' | SMTP Config: host=' . ($settings['host'] ?? 'none') . 
+                         ', port=' . ($settings['port'] ?? 'none') . 
+                         ', encryption=' . ($settings['encryption'] ?? 'none') . 
+                         ', from_email=' . ($settings['from_email'] ?? 'none');
+        } else {
+            $error_msg .= ' | Using default WordPress mail (SMTP not configured)';
+        }
+        
+        error_log($error_msg);
     }
 
     /**
@@ -2081,6 +2552,461 @@ class PalmeritaSubscriptions {
         });
         </script>
         <?php
+    }
+
+    /**
+     * Render Email Templates page
+     */
+    public function email_templates_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Permission denied', 'palmerita-subscriptions'));
+        }
+
+        // Limpieza una sola vez de plantillas existentes
+        $templates_cleaned = get_option('palmerita_templates_cleaned', false);
+        if (!$templates_cleaned) {
+            $this->clean_existing_templates();
+            update_option('palmerita_templates_cleaned', true);
+        }
+        
+        // Forzar restauración completa de plantillas (forzar cada vez para debug)
+        $templates_restored = get_option('palmerita_templates_css_restored', false);
+        if (!$templates_restored) {
+            $this->force_restore_templates_with_css();
+            update_option('palmerita_templates_css_restored', true);
+        }
+
+        // handle save
+        if (isset($_POST['palmerita_templates_nonce']) && wp_verify_nonce($_POST['palmerita_templates_nonce'],'save_email_templates')) {
+            $templates = array(
+                'cv'     => $this->clean_template_content($_POST['template_cv'] ?? ''),
+                'file'   => $this->clean_template_content($_POST['template_file'] ?? ''),
+                'promo'  => $this->clean_template_content($_POST['template_promo'] ?? ''),
+            );
+            update_option('palmerita_email_templates', $templates);
+            echo '<div class="notice notice-success is-dismissible animated fadeIn"><p>'.__('Templates saved.','palmerita-subscriptions').'</p></div>';
+        }
+
+        $templates = get_option('palmerita_email_templates', array('cv'=>'','file'=>'','promo'=>''));
+
+        // Limpiar slashes innecesarios automáticamente
+        foreach ($templates as $key => $template) {
+            if (!empty($template)) {
+                // Eliminar slashes dobles o múltiples
+                $templates[$key] = stripslashes($template);
+                // Si aún hay slashes múltiples, repetir
+                while (strpos($templates[$key], '\\\\') !== false) {
+                    $templates[$key] = stripslashes($templates[$key]);
+                }
+            }
+        }
+
+        // Pre-populate with default templates if empty so the user can edit instead of starting from scratch
+        if(empty($templates['cv']) && method_exists('PalmeritaDownloadManager','get_download_email_template')){
+            $templates['cv'] = PalmeritaDownloadManager::get_download_email_template('{{download_url}}');
+        }
+        if(empty($templates['file']) && method_exists('PalmeritaDownloadManager','get_zip_email_template')){
+            $templates['file'] = PalmeritaDownloadManager::get_zip_email_template('{{download_url}}');
+        }
+        if(empty($templates['promo']) && method_exists('PalmeritaDownloadManager','get_promo_welcome_email_template')){
+            $templates['promo'] = PalmeritaDownloadManager::get_promo_welcome_email_template();
+        }
+
+        // Iconos SVG para tabs
+        $icons = array(
+            'cv' => '<svg width="20" height="20" fill="none" viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2" fill="#0073aa"/><rect x="6" y="6" width="8" height="2" rx="1" fill="#fff"/><rect x="6" y="10" width="8" height="2" rx="1" fill="#fff"/></svg>',
+            'file' => '<svg width="20" height="20" fill="none" viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="2" fill="#0073aa"/><path d="M8 8h4v4H8z" fill="#fff"/></svg>',
+            'promo' => '<svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#0073aa"/><path d="M10 6v4l3 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+        );
+        ?>
+        <div class="wrap palmerita-email-templates">
+            <h1 style="display:flex;align-items:center;gap:10px;"><span>📧</span> <?php _e('Email Templates', 'palmerita-subscriptions'); ?></h1>
+            <div class="palmerita-instructions" style="background:#f8fafc;border:1px solid #ccd0d4;padding:16px;border-radius:6px;margin-bottom:18px;max-width:900px;">
+                <h2 style="margin-top:0;font-size:1.2em;">✍️ <?php _e('How to customize your emails','palmerita-subscriptions'); ?></h2>
+                <ul style="margin-left:20px;">
+                    <li><?php _e('Edit the HTML for each email below.','palmerita-subscriptions'); ?></li>
+                    <li><?php _e('You can use these tokens:','palmerita-subscriptions'); ?> <code>{{download_url}}</code>, <code>{{subscriber_help}}</code></li>
+                    <li><?php _e('Click "Restore Default" to reset a template to its original content.','palmerita-subscriptions'); ?></li>
+                    <li><?php _e('Preview updates live as you edit.','palmerita-subscriptions'); ?></li>
+                </ul>
+            </div>
+            <form method="post" action="" id="palmerita_templates_form">
+                <?php wp_nonce_field('save_email_templates','palmerita_templates_nonce'); ?>
+                <nav class="nav-tab-wrapper palmerita-big-tabs" id="palmerita-template-tabs" style="margin-bottom:0;">
+                    <a href="#template_cv" class="nav-tab nav-tab-active" style="font-size:1.1em;display:flex;align-items:center;gap:6px;"><?php echo $icons['cv']; ?> <?php _e('CV Email','palmerita-subscriptions'); ?></a>
+                    <a href="#template_file" class="nav-tab" style="font-size:1.1em;display:flex;align-items:center;gap:6px;"><?php echo $icons['file']; ?> <?php _e('File Email','palmerita-subscriptions'); ?></a>
+                    <a href="#template_promo" class="nav-tab" style="font-size:1.1em;display:flex;align-items:center;gap:6px;"><?php echo $icons['promo']; ?> <?php _e('Promo Welcome','palmerita-subscriptions'); ?></a>
+                </nav>
+                <div id="palmerita-template-flex">
+                    <div id="template_panels">
+                        <div class="palmerita-template-panel" data-type="cv" style="display:block;">
+                            <textarea id="template_cv" name="template_cv" class="palmerita-template"><?php echo htmlspecialchars($templates['cv'], ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <button type="button" class="button palmerita-restore-btn" data-type="cv" style="margin-top:6px;"><span>🔄</span> <?php _e('Restore Default','palmerita-subscriptions'); ?></button>
+                        </div>
+                        <div class="palmerita-template-panel" data-type="file" style="display:none;">
+                            <textarea id="template_file" name="template_file" class="palmerita-template"><?php echo htmlspecialchars($templates['file'], ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <button type="button" class="button palmerita-restore-btn" data-type="file" style="margin-top:6px;"><span>🔄</span> <?php _e('Restore Default','palmerita-subscriptions'); ?></button>
+                        </div>
+                        <div class="palmerita-template-panel" data-type="promo" style="display:none;">
+                            <textarea id="template_promo" name="template_promo" class="palmerita-template"><?php echo htmlspecialchars($templates['promo'], ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <button type="button" class="button palmerita-restore-btn" data-type="promo" style="margin-top:6px;"><span>🔄</span> <?php _e('Restore Default','palmerita-subscriptions'); ?></button>
+                        </div>
+                    </div>
+                    <iframe id="template_preview" style="flex:1;border:1px solid #ccd0d4;width:100%;height:500px;"></iframe>
+                </div>
+                <div id="palmerita-feedback" style="display:none;"></div>
+                <?php submit_button(__('Save Templates','palmerita-subscriptions')); ?>
+            </form>
+        </div>
+        <style>
+        .palmerita-big-tabs .nav-tab {font-size:1.1em;padding:10px 18px 10px 12px;min-width:160px;}
+        .palmerita-template-panel {margin-bottom:10px;}
+        .palmerita-restore-btn {background:#f3f4f6;border:1px solid #ccd0d4;transition:background .2s;}
+        .palmerita-restore-btn:hover {background:#e0e7ef;}
+        .animated.fadeIn {animation:fadeIn .7s;}
+        @keyframes fadeIn {from{opacity:0;}to{opacity:1;}}
+        #palmerita-feedback {margin-top:10px;}
+        
+        /* Mejorar el layout del editor visual */
+        #palmerita-template-flex {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            min-height: 600px;
+        }
+        
+        #template_panels {
+            flex: 1;
+            min-width: 400px;
+        }
+        
+        .palmerita-template {
+            width: 100%;
+            min-height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            border: 1px solid #ccd0d4;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        
+        #template_preview {
+            flex: 1;
+            min-width: 400px;
+            background: white;
+            border-radius: 4px;
+        }
+        
+        /* Responsivo */
+        @media (max-width: 1200px) {
+            #palmerita-template-flex {
+                flex-direction: column;
+            }
+            
+            #template_preview {
+                height: 400px;
+                min-height: 400px;
+            }
+        }
+        </style>
+        <script>
+        jQuery(function($){
+            // Tabs
+            $('#palmerita-template-tabs').on('click','a',function(e){
+                e.preventDefault();
+                $('#palmerita-template-tabs a').removeClass('nav-tab-active');
+                $(this).addClass('nav-tab-active');
+                $('.palmerita-template-panel').hide();
+                var type = $(this).attr('href').replace('#template_','');
+                $('.palmerita-template-panel[data-type='+type+']').show();
+                
+                // Limpiar blob URL anterior al cambiar tab
+                var iframe = document.getElementById('template_preview');
+                if (iframe.palmeritaBlobUrl) {
+                    URL.revokeObjectURL(iframe.palmeritaBlobUrl);
+                    iframe.palmeritaBlobUrl = null;
+                }
+                
+                updatePreview();
+            });
+            // Restore default
+            $('.palmerita-restore-btn').on('click',function(){
+                var type = $(this).data('type');
+                var btn = $(this);
+                btn.prop('disabled',true);
+                $('#palmerita-feedback').hide();
+                $.post(ajaxurl,{
+                    action:'palmerita_restore_template',
+                    type:type,
+                    _ajax_nonce:'<?php echo wp_create_nonce('palmerita_restore_template'); ?>'
+                },function(resp){
+                    btn.prop('disabled',false);
+                    if(resp.success && resp.data.html){
+                        $('#template_'+type).val(resp.data.html).trigger('change');
+                        $('#palmerita-feedback').html('<div class="notice notice-success animated fadeIn"><p><?php _e('Template restored to default!','palmerita-subscriptions'); ?></p></div>').show();
+                        updatePreview();
+                    }else{
+                        $('#palmerita-feedback').html('<div class="notice notice-error animated fadeIn"><p>'+resp.data+'</p></div>').show();
+                    }
+                });
+            });
+            // Live preview y validación de tokens
+            function updatePreview(){
+                var type = $('.palmerita-template-panel:visible').data('type');
+                var html = $('#template_'+type).val();
+                
+                console.log('=== DEBUG PREVIEW ===');
+                console.log('Type:', type);
+                console.log('Raw HTML length:', html.length);
+                console.log('Raw HTML preview:', html.substring(0, 200));
+                
+                if(!html.trim()){
+                    html = '<p style="text-align:center;color:#666;margin-top:40px;">'+EmailTemplates.i18n.defaultTemplate+'</p>';
+                }
+                
+                // Decodificar entidades HTML (&lt; &gt; &amp;) para que las etiquetas <style> y otros elementos se interpreten correctamente
+                var decoder = document.createElement('textarea');
+                decoder.innerHTML = html;
+                html = decoder.value;
+                
+                console.log('After decode length:', html.length);
+                console.log('After decode preview:', html.substring(0, 200));
+                
+                // Limpiar slashes en el JS también
+                html = html.replace(/\\\\/g, '\\').replace(/\\'/g, "'").replace(/\\"/g, '"');
+                
+                console.log('After slash clean preview:', html.substring(0, 200));
+                
+                html = html.replace(/{{download_url}}/g,'https://example.com/download-link');
+                html = html.replace(/{{subscriber_help}}/g,EmailTemplates.i18n.helpMsg);
+                
+                // Verificar si ya tiene DOCTYPE y html tags
+                var isFullDocument = html.toLowerCase().indexOf('<!doctype') !== -1 || html.toLowerCase().indexOf('<html') !== -1;
+                
+                var fullHTML;
+                if (isFullDocument) {
+                    // Si ya es un documento completo, usarlo tal como está
+                    fullHTML = html;
+                    console.log('Using as full document');
+                } else {
+                    // Si no, envolver en estructura básica
+                    fullHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Email Preview</title><style>body{margin:20px;font-family:Arial,sans-serif;}</style></head><body>' + html + '</body></html>';
+                    console.log('Wrapping in basic structure');
+                }
+                
+                console.log('Final HTML length:', fullHTML.length);
+                console.log('Final HTML preview:', fullHTML.substring(0, 300));
+                console.log('=== END DEBUG ===');
+                
+                // Usar blob URL para mejor compatibilidad
+                var iframe = document.getElementById('template_preview');
+                
+                // Crear blob URL
+                var blob = new Blob([fullHTML], {type: 'text/html'});
+                var url = URL.createObjectURL(blob);
+                
+                // Revocar URL anterior si existe
+                if (iframe.palmeritaBlobUrl) {
+                    URL.revokeObjectURL(iframe.palmeritaBlobUrl);
+                }
+                
+                // Asignar nueva URL
+                iframe.src = url;
+                iframe.palmeritaBlobUrl = url;
+            }
+            $('.palmerita-template').on('input change',updatePreview);
+            updatePreview();
+            
+            // Limpiar blob URLs al salir de la página
+            $(window).on('beforeunload', function() {
+                var iframe = document.getElementById('template_preview');
+                if (iframe && iframe.palmeritaBlobUrl) {
+                    URL.revokeObjectURL(iframe.palmeritaBlobUrl);
+                }
+            });
+        });
+        </script>
+        <?php
+    }
+
+    /**
+     * Clean existing templates from accumulated slashes (one-time cleanup)
+     */
+    private function clean_existing_templates() {
+        $templates = get_option('palmerita_email_templates', array());
+        $cleaned = false;
+        
+        foreach ($templates as $key => $template) {
+            if (!empty($template) && (strpos($template, '\\\\') !== false || strpos($template, "\\'") !== false)) {
+                $original = $template;
+                // Limpiar slashes múltiples
+                while (strpos($template, '\\\\') !== false) {
+                    $template = stripslashes($template);
+                }
+                $templates[$key] = $template;
+                $cleaned = true;
+            }
+        }
+        
+        if ($cleaned) {
+            update_option('palmerita_email_templates', $templates);
+        }
+    }
+    
+    /**
+     * Force restore templates that were damaged by wp_kses_post
+     */
+    private function force_restore_templates_with_css() {
+        // Restaurar solo si alguna plantilla carece de estilos (no contiene <style>) o está vacía
+        $templates = get_option('palmerita_email_templates', array());
+        $needs_restore = false;
+        foreach ($templates as $tmpl) {
+            if (empty($tmpl) || strpos($tmpl, '<style') === false) {
+                $needs_restore = true;
+                break;
+            }
+        }
+
+        if (!$needs_restore) {
+            return; // Todo bien, no restaurar
+        }
+
+        $default_templates = array();
+
+        if (method_exists('PalmeritaDownloadManager', 'get_download_email_template')) {
+            $default_templates['cv'] = PalmeritaDownloadManager::get_download_email_template('{{download_url}}');
+        }
+        if (method_exists('PalmeritaDownloadManager', 'get_zip_email_template')) {
+            $default_templates['file'] = PalmeritaDownloadManager::get_zip_email_template('{{download_url}}');
+        }
+        if (method_exists('PalmeritaDownloadManager', 'get_promo_welcome_email_template')) {
+            $default_templates['promo'] = PalmeritaDownloadManager::get_promo_welcome_email_template();
+        }
+
+        if (!empty($default_templates)) {
+            update_option('palmerita_email_templates', $default_templates);
+        }
+    }
+
+    // AJAX: restaurar plantilla por defecto
+    public function ajax_restore_template(){
+        check_ajax_referer('palmerita_restore_template');
+        if(!current_user_can('manage_options')){
+            wp_send_json_error(__('Permission denied','palmerita-subscriptions'));
+        }
+        $type = $_POST['type'] ?? '';
+        $html = '';
+        if($type==='cv' && method_exists('PalmeritaDownloadManager','get_download_email_template')){
+            $html = PalmeritaDownloadManager::get_download_email_template('{{download_url}}');
+        }elseif($type==='file' && method_exists('PalmeritaDownloadManager','get_zip_email_template')){
+            $html = PalmeritaDownloadManager::get_zip_email_template('{{download_url}}');
+        }elseif($type==='promo' && method_exists('PalmeritaDownloadManager','get_promo_welcome_email_template')){
+            $html = PalmeritaDownloadManager::get_promo_welcome_email_template();
+        }
+        if($html){
+            wp_send_json_success(['html'=>$html]);
+        }else{
+            wp_send_json_error(__('No default template found.','palmerita-subscriptions'));
+        }
+    }
+
+    private function log_email_delivery($type, $to, $subject, $success, $error = '') {
+        global $wpdb;
+        $table = $wpdb->prefix . 'palmerita_email_log';
+        $wpdb->query("CREATE TABLE IF NOT EXISTS $table (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email_to VARCHAR(255),
+            subject VARCHAR(255),
+            type VARCHAR(32),
+            success TINYINT(1),
+            error TEXT,
+            sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) CHARSET=utf8mb4;");
+        $wpdb->insert($table, [
+            'email_to' => $to,
+            'subject' => $subject,
+            'type' => $type,
+            'success' => $success ? 1 : 0,
+            'error' => $error,
+        ]);
+    }
+
+    /**
+     * Render Email Log page
+     */
+    public function email_log_page() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'palmerita_email_log';
+        $per_page = 30;
+        $paged = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+        $offset = ($paged - 1) * $per_page;
+        $where = '1=1';
+        $params = [];
+        // Filtros
+        $type = isset($_GET['type']) ? sanitize_text_field($_GET['type']) : '';
+        $success = isset($_GET['success']) ? intval($_GET['success']) : '';
+        $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
+        if ($type) { $where .= ' AND type = %s'; $params[] = $type; }
+        if ($success !== '') { $where .= ' AND success = %d'; $params[] = $success; }
+        if ($search) { $where .= ' AND (email_to LIKE %s OR subject LIKE %s)'; $params[] = "%$search%"; $params[] = "%$search%"; }
+        $total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table WHERE $where", ...$params));
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table WHERE $where ORDER BY sent_at DESC LIMIT %d OFFSET %d", ...array_merge($params, [$per_page, $offset])));
+        $types = ['cv'=>'CV','file'=>'File','promo'=>'Promo'];
+        echo '<div class="wrap"><h1>Email Log</h1>';
+        echo '<form method="get" style="margin-bottom:16px;">';
+        echo '<input type="hidden" name="page" value="palmerita-email-log" />';
+        echo '<select name="type"><option value="">All Types</option>';
+        foreach($types as $k=>$v) echo '<option value="'.$k.'"'.($type===$k?' selected':'').'>'.$v.'</option>';
+        echo '</select> ';
+        echo '<select name="success"><option value="">All Status</option><option value="1"'.($success==='1'?' selected':'').'>Success</option><option value="0"'.($success==='0'?' selected':'').'>Failed</option></select> ';
+        echo '<input type="search" name="s" value="'.esc_attr($search).'" placeholder="Search email or subject..." /> ';
+        echo '<button class="button">Filter</button>';
+        echo '</form>';
+        echo '<table class="widefat fixed striped"><thead><tr><th>Date</th><th>Type</th><th>Email To</th><th>Subject</th><th>Status</th><th>Error</th></tr></thead><tbody>';
+        if($rows){
+            foreach($rows as $row){
+                echo '<tr>';
+                echo '<td>'.esc_html($row->sent_at).'</td>';
+                echo '<td>'.esc_html($types[$row->type] ?? $row->type).'</td>';
+                echo '<td>'.esc_html($row->email_to).'</td>';
+                echo '<td>'.esc_html($row->subject).'</td>';
+                echo '<td>'.($row->success?'<span style="color:green;">✔</span>':'<span style="color:red;">✖</span>').'</td>';
+                echo '<td>'.esc_html($row->error).'</td>';
+                echo '</tr>';
+            }
+        }else{
+            echo '<tr><td colspan="6">No log entries found.</td></tr>';
+        }
+        echo '</tbody></table>';
+        // Paginación
+        $total_pages = ceil($total/$per_page);
+        if($total_pages>1){
+            echo '<div style="margin-top:16px;">';
+            for($i=1;$i<=$total_pages;$i++){
+                if($i==$paged) echo '<strong>'.$i.'</strong> ';
+                else echo '<a href="'.esc_url(add_query_arg(['paged'=>$i])).'">'.$i.'</a> ';
+            }
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+
+    /**
+     * Clean template content from excessive slashes and sanitize
+     */
+    private function clean_template_content($content) {
+        if (empty($content)) {
+            return '';
+        }
+        
+        // Primero eliminar slashes múltiples
+        while (strpos($content, '\\\\') !== false) {
+            $content = stripslashes($content);
+        }
+        
+        // Para administradores, guardar HTML completo sin aplicar wp_kses que remueve head/style
+        // Aún podemos balancear etiquetas con wp_kses_stripslashes (pero ya hicimos stripslashes)
+        return $content;
     }
 }
 

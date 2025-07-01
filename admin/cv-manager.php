@@ -13,7 +13,8 @@ if (!defined('ABSPATH')) {
 if (isset($_POST['upload_cv']) && wp_verify_nonce($_POST['_wpnonce'], 'upload_cv')) {
     if (!empty($_FILES['cv_file']['name'])) {
         $upload_dir = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/';
-        $file_name = 'Hanaley-Palma-CV.pdf';
+        $custom_name = !empty($_POST['cv_custom_name']) ? sanitize_file_name($_POST['cv_custom_name']) : 'My-CV';
+        $file_name = $custom_name . '.pdf';
         $upload_path = $upload_dir . $file_name;
         
         // Validate file type
@@ -23,13 +24,14 @@ if (isset($_POST['upload_cv']) && wp_verify_nonce($_POST['_wpnonce'], 'upload_cv
         } else if ($_FILES['cv_file']['size'] > 10 * 1024 * 1024) {
             echo '<div class="notice notice-error"><p>File size must be less than 10MB.</p></div>';
         } else {
-            if (file_exists($upload_path)) {
-                unlink($upload_path);
+            // Remove all existing PDFs in the folder
+            foreach (glob($upload_dir . '*.pdf') as $old_cv) {
+                unlink($old_cv);
             }
-            
             if (move_uploaded_file($_FILES['cv_file']['tmp_name'], $upload_path)) {
                 update_option('palmerita_cv_uploaded', current_time('mysql'));
                 update_option('palmerita_cv_filename', $_FILES['cv_file']['name']);
+                update_option('palmerita_cv_custom_name', $file_name);
                 echo '<div class="notice notice-success"><p>CV uploaded successfully!</p></div>';
             } else {
                 echo '<div class="notice notice-error"><p>Error uploading file.</p></div>';
@@ -40,24 +42,27 @@ if (isset($_POST['upload_cv']) && wp_verify_nonce($_POST['_wpnonce'], 'upload_cv
 
 // Handle file deletion
 if (isset($_POST['delete_cv']) && wp_verify_nonce($_POST['_wpnonce'], 'delete_cv')) {
-    $upload_path = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/Hanaley-Palma-CV.pdf';
-    
+    $upload_dir = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/';
+    $file_name = get_option('palmerita_cv_custom_name', 'My-CV.pdf');
+    $upload_path = $upload_dir . $file_name;
     if (file_exists($upload_path)) {
         unlink($upload_path);
         delete_option('palmerita_cv_uploaded');
         delete_option('palmerita_cv_filename');
         delete_option('palmerita_cv_filesize');
-        
+        delete_option('palmerita_cv_custom_name');
         echo '<div class="notice notice-success"><p>' . __('CV deleted successfully!', 'palmerita-subscriptions') . '</p></div>';
     }
 }
 
 // Check if CV exists
-$cv_path = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/Hanaley-Palma-CV.pdf';
+$upload_dir = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/';
+$file_name = get_option('palmerita_cv_custom_name', 'My-CV.pdf');
+$cv_path = $upload_dir . $file_name;
 $cv_exists = file_exists($cv_path);
 $cv_uploaded = get_option('palmerita_cv_uploaded', '');
 $cv_filename = get_option('palmerita_cv_filename', '');
-$cv_filesize = get_option('palmerita_cv_filesize', 0);
+$cv_filesize = $cv_exists ? filesize($cv_path) : 0;
 ?>
 
 <div class="wrap">
@@ -102,7 +107,7 @@ $cv_filesize = get_option('palmerita_cv_filesize', 0);
                 <div class="action-group">
                     <h3><?php _e('Preview & Test', 'palmerita-subscriptions'); ?></h3>
                     <div class="action-buttons">
-                        <a href="<?php echo PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/Hanaley-Palma-CV.pdf'; ?>" 
+                        <a href="<?php echo PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/' . $file_name; ?>" 
                            target="_blank" 
                            class="button button-primary">
                             <span class="dashicons dashicons-visibility"></span>
@@ -123,7 +128,7 @@ $cv_filesize = get_option('palmerita_cv_filesize', 0);
                     <div class="link-examples">
                         <div class="link-item">
                             <strong><?php _e('Direct Download:', 'palmerita-subscriptions'); ?></strong>
-                            <code><?php echo PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/Hanaley-Palma-CV.pdf'; ?></code>
+                            <code><?php echo PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/' . $file_name; ?></code>
                         </div>
                         <div class="link-item">
                             <strong><?php _e('Viewer Page:', 'palmerita-subscriptions'); ?></strong>
@@ -177,6 +182,11 @@ $cv_filesize = get_option('palmerita_cv_filesize', 0);
                         <div class="file-info" style="display: none;">
                             <span class="file-name"></span>
                             <span class="file-size"></span>
+                        </div>
+                        <div style="margin-top:20px;">
+                            <label for="cv_custom_name"><strong><?php _e('File name (without .pdf):', 'palmerita-subscriptions'); ?></strong></label>
+                            <input type="text" name="cv_custom_name" id="cv_custom_name" value="<?php echo esc_attr(str_replace('.pdf','',$file_name)); ?>" pattern="[A-Za-z0-9\-_ ]+" maxlength="60" style="width:220px;" required>
+                            <span style="color:#888; font-size:0.9em;">.pdf</span>
                         </div>
                     </div>
                 </div>

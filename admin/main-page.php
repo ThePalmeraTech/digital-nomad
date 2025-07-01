@@ -42,6 +42,58 @@ $daily_stats = $wpdb->get_results("
     GROUP BY DATE(date_created), type
     ORDER BY date DESC
 ");
+
+// --- FILE MANAGER SECTION ---
+$file_dir = PALMERITA_SUBS_PLUGIN_DIR . 'assets/files/';
+if (!file_exists($file_dir)) { mkdir($file_dir, 0755, true); }
+$file_name = get_option('palmerita_file_custom_name', 'My-File.zip');
+$file_path = $file_dir . $file_name;
+$file_exists = file_exists($file_path);
+$file_uploaded = get_option('palmerita_file_uploaded', '');
+
+// Handle file upload
+if (isset($_POST['upload_file']) && wp_verify_nonce($_POST['_wpnonce'], 'upload_file')) {
+    if (!empty($_FILES['dist_file']['name'])) {
+        $custom_name = !empty($_POST['file_custom_name']) ? sanitize_file_name($_POST['file_custom_name']) : 'My-File';
+        $ext = strtolower(pathinfo($_FILES['dist_file']['name'], PATHINFO_EXTENSION));
+        $allowed = array('zip','pdf','docx');
+        if (!in_array($ext, $allowed)) {
+            echo '<div class="notice notice-error"><p>Only ZIP, PDF, or DOCX files are allowed.</p></div>';
+        } else if ($_FILES['dist_file']['size'] > 20 * 1024 * 1024) {
+            echo '<div class="notice notice-error"><p>File size must be less than 20MB.</p></div>';
+        } else {
+            // Remove all existing files in the folder
+            foreach (glob($file_dir . '*') as $old_file) {
+                unlink($old_file);
+            }
+            $file_name = $custom_name . '.' . $ext;
+            $file_path = $file_dir . $file_name;
+            if (move_uploaded_file($_FILES['dist_file']['tmp_name'], $file_path)) {
+                update_option('palmerita_file_uploaded', current_time('mysql'));
+                update_option('palmerita_file_custom_name', $file_name);
+                echo '<div class="notice notice-success"><p>File uploaded successfully!</p></div>';
+            } else {
+                echo '<div class="notice notice-error"><p>Error uploading file.</p></div>';
+            }
+        }
+    }
+}
+// Handle file deletion
+if (isset($_POST['delete_file']) && wp_verify_nonce($_POST['_wpnonce'], 'delete_file')) {
+    $file_name = get_option('palmerita_file_custom_name', 'My-File.zip');
+    $file_path = $file_dir . $file_name;
+    if (file_exists($file_path)) {
+        unlink($file_path);
+        delete_option('palmerita_file_uploaded');
+        delete_option('palmerita_file_custom_name');
+        echo '<div class="notice notice-success"><p>File deleted successfully!</p></div>';
+    }
+}
+$file_name = get_option('palmerita_file_custom_name', 'My-File.zip');
+$file_path = $file_dir . $file_name;
+$file_exists = file_exists($file_path);
+$file_uploaded = get_option('palmerita_file_uploaded', '');
+// --- FILE MANAGER UI ---
 ?>
 
 <div class="wrap">
@@ -200,6 +252,65 @@ $daily_stats = $wpdb->get_results("
                 <div class="step-number">3</div>
                 <h3><?php _e('Manage Lists', 'palmerita-subscriptions'); ?></h3>
                 <p><?php _e('Go to the CV or Promotions pages to view, export and manage subscriptions.', 'palmerita-subscriptions'); ?></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Manager -->
+    <div class="palmerita-admin-section full-width">
+        <div class="section-header">
+            <h2><?php _e('File Manager', 'palmerita-subscriptions'); ?></h2>
+        </div>
+        
+        <div class="palmerita-file-manager">
+            <?php if ($file_exists): ?>
+                <div class="file-status-card success">
+                    <div class="status-icon">✅</div>
+                    <div class="status-content">
+                        <h2><?php _e('File Ready for Download', 'palmerita-subscriptions'); ?></h2>
+                        <p><?php _e('Your file is uploaded and ready to be shared.', 'palmerita-subscriptions'); ?></p>
+                        <div class="file-details">
+                            <div class="detail-item"><strong><?php _e('File Name:', 'palmerita-subscriptions'); ?></strong> <span><?php echo esc_html($file_name); ?></span></div>
+                            <div class="detail-item"><strong><?php _e('Uploaded:', 'palmerita-subscriptions'); ?></strong> <span><?php echo $file_uploaded ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($file_uploaded)) : '-'; ?></span></div>
+                            <div class="detail-item"><strong><?php _e('Direct Download:', 'palmerita-subscriptions'); ?></strong> <code><?php echo PALMERITA_SUBS_PLUGIN_URL . 'assets/files/' . $file_name; ?></code></div>
+                        </div>
+                    </div>
+                </div>
+            <?php else: ?>
+                <div class="file-status-card warning">
+                    <div class="status-icon">⚠️</div>
+                    <div class="status-content">
+                        <h2><?php _e('No File Uploaded', 'palmerita-subscriptions'); ?></h2>
+                        <p><?php _e('Upload a file to start sharing it with visitors.', 'palmerita-subscriptions'); ?></p>
+                    </div>
+                </div>
+            <?php endif; ?>
+            <div class="file-upload-section">
+                <h2><?php echo $file_exists ? __('Replace File', 'palmerita-subscriptions') : __('Upload File', 'palmerita-subscriptions'); ?></h2>
+                <form method="post" enctype="multipart/form-data" class="file-upload-form">
+                    <?php wp_nonce_field('upload_file'); ?>
+                    <div class="upload-area">
+                        <div class="upload-icon">🗂️</div>
+                        <div class="upload-content">
+                            <h3><?php _e('Select your file', 'palmerita-subscriptions'); ?></h3>
+                            <p><?php _e('Choose a ZIP, PDF, or DOCX file (max 20MB)', 'palmerita-subscriptions'); ?></p>
+                            <input type="file" name="dist_file" id="dist_file" accept=".zip,.pdf,.docx" required class="file-input">
+                            <label for="dist_file" class="file-label"><span class="dashicons dashicons-upload"></span> <?php _e('Choose File', 'palmerita-subscriptions'); ?></label>
+                            <div class="file-info" style="display: none;"><span class="file-name"></span><span class="file-size"></span></div>
+                            <div style="margin-top:20px;">
+                                <label for="file_custom_name"><strong><?php _e('File name (without extension):', 'palmerita-subscriptions'); ?></strong></label>
+                                <input type="text" name="file_custom_name" id="file_custom_name" value="<?php echo esc_attr(str_replace(array('.zip','.pdf','.docx'),'', $file_name)); ?>" pattern="[A-Za-z0-9\-_ ]+" maxlength="60" style="width:220px;" required>
+                                <span style="color:#888; font-size:0.9em;">.zip/.pdf/.docx</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="upload-actions">
+                        <input type="submit" name="upload_file" class="button button-primary button-large" value="<?php echo $file_exists ? __('Replace File', 'palmerita-subscriptions') : __('Upload File', 'palmerita-subscriptions'); ?>">
+                        <?php if ($file_exists): ?>
+                            <input type="submit" name="delete_file" class="button button-link-delete" value="<?php _e('Delete Current File', 'palmerita-subscriptions'); ?>" onclick="return confirm('<?php _e('Are you sure you want to delete the current file?', 'palmerita-subscriptions'); ?>')">
+                        <?php endif; ?>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

@@ -10,6 +10,9 @@ if (!defined('ABSPATH')) {
 $token = get_query_var('download_token');
 $result = PalmeritaDownloadManager::process_download($token);
 
+$cv_file_name = get_option('palmerita_cv_custom_name', 'My-CV.pdf');
+$cv_file_url = PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/' . $cv_file_name;
+
 get_header();
 ?>
 
@@ -46,9 +49,9 @@ get_header();
                     </div>
                     
                     <div class="download-action">
-                        <a href="<?php echo PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/Hanaley-Palma-CV.pdf'; ?>" 
+                        <a href="<?php echo $cv_file_url; ?>" 
                            class="download-btn" 
-                           download="Hanaley-Palma-CV.pdf">
+                           download="<?php echo esc_attr($cv_file_name); ?>">
                             📄 <?php _e('Download CV Now', 'palmerita-subscriptions'); ?>
                         </a>
                         

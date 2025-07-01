@@ -20,13 +20,14 @@ A comprehensive WordPress plugin for managing CV distribution and promotional su
 ## ✨ Features
 
 ### Core Functionality
-- **CV Distribution System**: Secure CV sharing with unique download links
+- **CV Distribution System**: Secure CV sharing with unique download links (custom file name supported)
 - **Integrated PDF Viewer**: Professional in-browser CV viewing experience
 - **Subscription Management**: Collect and manage email subscriptions
 - **Download Analytics**: Track downloads and user engagement
+- **Link Tracking & Analytics**: Monitor every unique link — views, clicks, click-through rate, status, expiry
 - **Email Automation**: Professional HTML email templates
 - **Terms & Conditions**: Customizable legal terms for CV and promotions
-- **File Distribution System**: Share any ZIP (or other file) with the same secure workflow
+- **File Distribution System**: Share any ZIP (or other file) with the same secure workflow (custom file name supported)
 
 ### Security Features
 - **Unique Tokens**: 32-character secure tokens for each download
@@ -72,8 +73,14 @@ A comprehensive WordPress plugin for managing CV distribution and promotional su
 ### CV Upload
 1. Go to **Digital Nomad Subscriptions → CV Manager**
 2. Upload a PDF file (max 10MB)
-3. The system will automatically rename it to `Hanaley-Palma-CV.pdf`
+3. You can now set a custom file name for your CV before uploading. The system will use this name for all download links.
 4. Test the viewer using the "Test Viewer Page" button
+
+### File Upload (ZIP or other)
+1. Go to **Digital Nomad Subscriptions → File Manager**
+2. Upload your file (ZIP or other allowed type)
+3. You can now set a custom file name before uploading. The system will use this name for all download links.
+4. You can delete or replace the file at any time from the admin panel.
 
 ### Email & SMTP Configuration
 The plugin now ships with its own **Email Settings** panel:
@@ -113,7 +120,7 @@ No additional SMTP plugin is required.
 
 ### CV Manager (`/wp-admin/admin.php?page=palmerita-cv-manager`)
 - **Upload Interface**: Drag-and-drop CV upload with validation
-- **File Management**: Replace or delete existing CV files
+- **File Management**: Replace, delete, or rename existing CV files (custom file name field)
 - **Preview Tools**: Test viewer and direct PDF preview
 - **Usage Instructions**: Step-by-step guide for the CV system
 
@@ -130,7 +137,8 @@ No additional SMTP plugin is required.
 
 ### File Manager (`/wp-admin/admin.php?page=palmerita-file-manager`)
 - **ZIP Upload**: Upload/replace the file you wish to distribute
-- **Current File**: Quick link to the active ZIP
+- **File Name**: Set or edit the custom file name for the distributed file
+- **Current File**: Quick link to the active file
 - **Modal Text**: Set custom title & description for the download modal
 
 ### Terms & Conditions (`/wp-admin/admin.php?page=palmerita-terms`)
@@ -143,76 +151,52 @@ No additional SMTP plugin is required.
 - **Button Appearance**: Change default label, emoji/icon and background colour without touching code.
 - **Non-destructive**: Leave fields empty to keep the built-in defaults.
 
-## 🏷️ Shortcodes
+### Link Analytics (`/wp-admin/admin.php?page=palmerita-link-analytics`)
+- **Link Dashboard**: Total links, click-through rate, today's clicks
+- **Filters & Search**: By type, status, clicked/unclicked, email
+- **Export**: CSV export of full link dataset
 
-### `[palmerita_subscription_buttons]`
-Displays the three action buttons (CV, Promotions, File). Individual copy, icon and colour are controlled from **Subscriptions → Modal Copy** page.
+### Upgrade Tracking (`/wp-admin/admin.php?page=palmerita-upgrade-tracking`)
+- **Database Upgrade Wizard**: Adds tracking columns for legacy installs
+- **Status Check**: Verifies version and missing columns
+- **One-click Upgrade**: Safe schema update with nonce & capability checks
 
-```php
-[palmerita_subscription_buttons]
-```
+### Email Templates
 
-**Attributes:**
-- `cv_text`: Custom text for CV button (default: "Get my CV")
-- `promo_text`: Custom text for promo button (default: "Get Promotions")
-- `style`: Button style - "default", "minimal", "gradient" (default: "default")
+### Visual Email Template Editor (desde v1.2.1)
 
-### `[palmerita_cv_button]`
-Displays only the CV subscription button.
+La edición de emails ahora es completamente visual y accesible desde el admin de WordPress:
 
-```php
-[palmerita_cv_button text="Download Resume" style="gradient"]
-```
+- **Editor visual HTML** para los tres tipos de email: CV, File, Promo.
+- **Tabs grandes con iconos** para cambiar entre plantillas.
+- **Previsualización en vivo** del email a medida que editas.
+- **Botón "Restaurar por defecto"** para cada plantilla (AJAX, sin recargar la página).
+- **Instrucciones visuales** y ejemplos de tokens disponibles: <code>{{download_url}}</code>, <code>{{subscriber_help}}</code>.
+- **Feedback animado** al guardar o restaurar plantillas.
+- **Validación de tokens** en el preview.
+- **Carga automática del HTML por defecto** si el campo está vacío.
+- **Compatibilidad CSS completa**: Se permiten etiquetas `<style>` y atributos `style=`, por lo que puedes personalizar el diseño sin restricciones.
+- **Guarda y persiste**: Los cambios se almacenan de forma segura; al volver a la página los verás tal cual los dejaste.
+- **Editor CodeMirror** con resaltado de sintaxis, autocompletado y atajos de teclado.
+- **No es necesario editar PHP**: todo se gestiona desde el admin.
 
-**Attributes:**
-- `text`: Button text (default: "Get my CV")
-- `style`: Button style (default: "default")
-- `class`: Additional CSS classes
+#### ¿Cómo acceder?
 
-### `[palmerita_promo_button]`
-Displays only the promotional subscription button.
+1. Ve a **Subscriptions → Email Templates** en el admin de WordPress.
+2. Edita el HTML de cada email usando el editor visual.
+3. Usa el botón "Restaurar por defecto" si quieres volver al diseño original.
+4. Visualiza los cambios en tiempo real en el panel de previsualización.
 
-```php
-[palmerita_promo_button text="Join Newsletter" style="minimal"]
-```
+#### Tokens disponibles
+- <code>{{download_url}}</code>: Enlace seguro de descarga/visualización.
+- <code>{{subscriber_help}}</code>: Mensaje de ayuda (configurable en Email Settings).
 
-**Attributes:**
-- `text`: Button text (default: "Get Promotions")
-- `style`: Button style (default: "default")
-- `class`: Additional CSS classes
-
-### `[palmerita_file_button]`
-Displays a single button that lets visitors request the shared ZIP file.
-
-```php
-[palmerita_file_button text="Download File" style="gradient"]
-```
-
-**Attributes:**
-- `text`: Button text (default: "Download File")
-- `style`: Button style (default: "gradient")
-- `class`: Additional CSS classes
-
-## 📧 Email Templates
-
-### CV Download Email
-**Subject**: "Your CV Download Link - Digital Nomad Subscriptions"
-
-**Features**:
-- Professional gradient header design
-- Clear call-to-action button
-- Important information box with download details
-- Personal introduction and contact information
-- Responsive HTML design
-
-### Email Customization
-Modify email templates in `/includes/download-manager.php`:
-
-```php
-private static function get_download_email_template($download_url) {
-    // Customize HTML template here
-}
-```
+#### Ejemplo de flujo
+1. Selecciona la plantilla (CV, File, Promo) usando los tabs con iconos.
+2. Edita el HTML en el editor visual.
+3. Visualiza el resultado en el panel de preview.
+4. Haz clic en "Restaurar por defecto" para volver al HTML original.
+5. Guarda los cambios y recibirás feedback animado de éxito.
 
 ## 🔒 Security Features
 

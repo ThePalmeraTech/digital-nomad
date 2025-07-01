@@ -21,8 +21,9 @@ if (!$is_preview) {
 }
 
 // Check if CV file exists
-$cv_file_path = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/Hanaley-Palma-CV.pdf';
-$cv_file_url = PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/Hanaley-Palma-CV.pdf';
+$cv_file_name = get_option('palmerita_cv_custom_name', 'My-CV.pdf');
+$cv_file_path = PALMERITA_SUBS_PLUGIN_DIR . 'assets/cv/' . $cv_file_name;
+$cv_file_url = PALMERITA_SUBS_PLUGIN_URL . 'assets/cv/' . $cv_file_name;
 
 if (!file_exists($cv_file_path)) {
     wp_die('CV file not found. Please contact the administrator.');
@@ -39,7 +40,7 @@ get_header();
         </div>
         
         <div class="actions-section">
-            <a href="<?php echo $cv_file_url; ?>" download="Hanaley-Palma-CV.pdf" class="download-btn">
+            <a href="<?php echo $cv_file_url; ?>" download="<?php echo esc_attr($cv_file_name); ?>" class="download-btn">
                 📄 Download PDF
             </a>
         </div>
