@@ -182,10 +182,10 @@ class PalmeritaSubscriptions {
                 wp_enqueue_script(
                     'palmerita-subs-admin-colors',
                     PALMERITA_SUBS_PLUGIN_URL . 'assets/js/admin-colors.js',
-                    array('jquery'),
-                    PALMERITA_SUBS_VERSION,
-                    true
-                );
+                array('jquery'),
+                PALMERITA_SUBS_VERSION,
+                true
+            );
             }
         }
     }
@@ -345,13 +345,21 @@ class PalmeritaSubscriptions {
                 $download_url = PalmeritaDownloadManager::generate_download_link($email, $subscription_id);
                 
                 if ($download_url) {
-                    PalmeritaDownloadManager::send_download_email($email, $download_url);
+                    $email_sent = PalmeritaDownloadManager::send_download_email($email, $download_url);
+                    if (!$email_sent) {
+                        error_log('Palmerita: Failed to send CV email to ' . $email);
+                        // Still return success to user, but log the error
+                    }
                 }
             } elseif ($type === 'plugin') {
                 $subscription_id = $result;
                 $download_url = PalmeritaDownloadManager::generate_download_link($email, $subscription_id);
                 if ($download_url) {
-                    PalmeritaDownloadManager::send_zip_email($email, $download_url);
+                    $email_sent = PalmeritaDownloadManager::send_zip_email($email, $download_url);
+                    if (!$email_sent) {
+                        error_log('Palmerita: Failed to send plugin email to ' . $email);
+                        // Still return success to user, but log the error
+                    }
                 }
             }
             
@@ -372,6 +380,12 @@ class PalmeritaSubscriptions {
         global $wpdb;
         
         $table_name = $wpdb->prefix . 'palmerita_subscriptions';
+        
+        // --- Safety check: create table on the fly if missing ---
+        if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table_name ) ) !== $table_name ) {
+            // Attempt to (re)create the table – this avoids fatal errors on new clones/migrations
+            $this->create_database_tables();
+        }
         
         // Check if email already exists for this type
         $existing = $wpdb->get_var($wpdb->prepare(
@@ -1108,6 +1122,7 @@ class PalmeritaSubscriptions {
             return; // Use default mailer
         }
 
+        // Force SMTP mode
         $phpmailer->isSMTP();
         $phpmailer->Host       = sanitize_text_field($settings['host'] ?? '');
         $phpmailer->Port       = intval($settings['port'] ?? 587);
@@ -1116,9 +1131,40 @@ class PalmeritaSubscriptions {
         $phpmailer->Password   = $settings['password'] ?? '';
         $phpmailer->SMTPSecure = sanitize_text_field($settings['encryption'] ?? 'tls'); // tls/ssl/''
 
+        // Force SSL/TLS settings for common ports
+        if ($phpmailer->Port == 465) {
+            $phpmailer->SMTPSecure = 'ssl';
+        } elseif ($phpmailer->Port == 587) {
+            $phpmailer->SMTPSecure = 'tls';
+        }
+
+        // Enable debugging in development/staging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            $phpmailer->SMTPDebug = 2; // Enable verbose debug output
+            $phpmailer->Debugoutput = function($str, $level) {
+                error_log("SMTP Debug: $str");
+            };
+        }
+
+        // Set timeout values for better reliability
+        $phpmailer->Timeout = 30;
+        $phpmailer->SMTPTimeout = 30;
+
+        // Disable SSL verification if needed (not recommended for production)
+        $phpmailer->SMTPOptions = array(
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true
+            )
+        );
+
         if (!empty($settings['from_email'])) {
             $phpmailer->setFrom($settings['from_email'], $settings['from_name'] ?? '');
         }
+
+        // Log configuration for debugging
+        error_log("Palmerita SMTP: Configuring SMTP with host: {$phpmailer->Host}, port: {$phpmailer->Port}, encryption: {$phpmailer->SMTPSecure}");
     }
     
     /**
@@ -1300,13 +1346,46 @@ class PalmeritaSubscriptions {
             wp_send_json_error(__('Invalid email address', 'palmerita-subscriptions'));
         }
 
-        $sent = wp_mail($to, __('Palmerita Subscriptions – Test Email', 'palmerita-subscriptions'), __('This is a test email confirming your SMTP settings are working.', 'palmerita-subscriptions'));
+        // Capture PHPMailer errors
+        add_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
+
+        $subject = __('Palmerita Subscriptions – Test Email', 'palmerita-subscriptions');
+        $message = __('This is a test email confirming your SMTP settings are working.', 'palmerita-subscriptions');
+        
+        // Add extra headers
+        $headers = array('Content-Type: text/html; charset=UTF-8');
+        
+        $sent = wp_mail($to, $subject, $message, $headers);
+
+        remove_action('wp_mail_failed', array($this, 'log_wp_mail_error'));
 
         if ($sent) {
             wp_send_json_success(__('Test email sent successfully. Please check your inbox.', 'palmerita-subscriptions'));
         } else {
-            wp_send_json_error(__('Failed to send test email. Check your SMTP settings.', 'palmerita-subscriptions'));
+            $settings = get_option('palmerita_email_settings', array());
+            $error_msg = __('Failed to send test email. Check your SMTP settings.', 'palmerita-subscriptions');
+            
+            // Add debugging info for admins
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                $debug_info = array(
+                    'Host: ' . ($settings['host'] ?? 'Not set'),
+                    'Port: ' . ($settings['port'] ?? 'Not set'),
+                    'Username: ' . ($settings['username'] ?? 'Not set'),
+                    'Encryption: ' . ($settings['encryption'] ?? 'Not set'),
+                    'From Email: ' . ($settings['from_email'] ?? 'Not set')
+                );
+                $error_msg .= ' Debug info: ' . implode(', ', $debug_info);
+            }
+            
+            wp_send_json_error($error_msg);
         }
+    }
+
+    /**
+     * Log wp_mail errors for debugging
+     */
+    public function log_wp_mail_error($wp_error) {
+        error_log('WP Mail Error: ' . $wp_error->get_error_message());
     }
 
     /**
