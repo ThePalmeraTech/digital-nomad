@@ -4,12 +4,14 @@
 
 /* Subscription Buttons Container */
 .palmerita-subscription-buttons {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
-  justify-content: center;
-  align-items: center;
-  margin: 2rem 0;
-  flex-wrap: wrap;
+  margin: 0; /* Spacing is handled by parent div in theme */
+}
+
+.palmerita-subscription-buttons > .palmerita-btn-cv {
+  grid-column: 1 / -1; /* Span full width */
 }
 
 /* Base Button Styles */
@@ -18,10 +20,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 1rem 2rem;
+  padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 0.75rem;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
@@ -29,7 +31,7 @@
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   position: relative;
   overflow: hidden;
-  min-width: 180px;
+  width: 100%;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -49,39 +51,81 @@
   left: 100%;
 }
 
-/* CV Button */
-.palmerita-btn-cv {
+/* CV Button - Default styles when no custom colors are set */
+.palmerita-btn-cv:not([style*="background-color"]) {
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: white;
 }
 
-.palmerita-btn-cv:hover {
+.palmerita-btn-cv:not([style*="background-color"]):hover {
   background: linear-gradient(135deg, #5b5ff1, #7c3aed);
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
 }
 
-/* Promo Button */
-.palmerita-btn-promo {
+/* CV Button - Custom color support */
+.palmerita-btn-cv[style*="background-color"] {
+  /* Override theme styles with higher specificity */
+  background-image: none !important;
+}
+
+.palmerita-btn-cv[style*="background-color"]:hover {
+  filter: brightness(0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Promo Button - Default styles when no custom colors are set */
+.palmerita-btn-promo:not([style*="background-color"]) {
   background: linear-gradient(135deg, #f59e0b, #ef4444);
   color: white;
 }
 
-.palmerita-btn-promo:hover {
+.palmerita-btn-promo:not([style*="background-color"]):hover {
   background: linear-gradient(135deg, #d97706, #dc2626);
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
 }
 
-/* Plugin Button */
-.palmerita-btn-plugin {
+/* Promo Button - Custom color support */
+.palmerita-btn-promo[style*="background-color"] {
+  /* Override theme styles with higher specificity */
+  background-image: none !important;
+}
+
+.palmerita-btn-promo[style*="color"] {
+  /* Override theme color with higher specificity */
+  color: inherit !important;
+}
+
+.palmerita-btn-promo[style*="background-color"]:hover {
+  filter: brightness(0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Plugin Button - Default styles when no custom colors are set */
+.palmerita-btn-plugin:not([style*="background-color"]) {
   background: linear-gradient(135deg, #1f2937, #6366f1);
   color: #fff;
 }
-.palmerita-btn-plugin:hover {
+
+.palmerita-btn-plugin:not([style*="background-color"]):hover {
   background: linear-gradient(135deg, #111827, #4f46e5);
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(31,41,55,0.3);
+}
+
+/* Plugin Button - Custom color support */
+.palmerita-btn-plugin[style*="background-color"] {
+  /* Override theme styles with higher specificity */
+  background-image: none !important;
+}
+
+.palmerita-btn-plugin[style*="background-color"]:hover {
+  filter: brightness(0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
 /* Button Icons */
@@ -326,8 +370,10 @@
 
 @media (max-width: 640px) {
   .palmerita-subscription-buttons {
-    flex-direction: column;
-    gap: 0.75rem;
+    grid-template-columns: 1fr;
+  }
+  .palmerita-subscription-buttons > .palmerita-btn {
+    grid-column: auto;
   }
   
   .palmerita-btn {
@@ -474,4 +520,67 @@
   height: 1.2em;
   vertical-align: middle;
   fill: currentColor;
+}
+
+/* Custom color enhancements */
+.palmerita-btn[style*="background-color"] {
+  position: relative;
+}
+
+.palmerita-btn[style*="background-color"]:before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+}
+
+/* Accessibility improvements for custom colors */
+.palmerita-btn[style*="background-color"]:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5), 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Animation improvements for custom colored buttons */
+.palmerita-btn[style*="background-color"]:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Ensure text remains readable on custom backgrounds */
+.palmerita-btn[style*="background-color"] .btn-text,
+.palmerita-btn[style*="background-color"] .btn-icon {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Color picker preview styles for admin */
+.palmerita-color-preview {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid #ddd;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Improved button states for better UX */
+.palmerita-btn:not(:disabled):hover {
+  cursor: pointer;
+}
+
+.palmerita-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Better visual feedback for color changes */
+.palmerita-btn[style*="background-color"] {
+  transition: all 0.3s ease, background-color 0.1s ease, color 0.1s ease;
+}
+
+/* Ensure proper contrast is maintained */
+.palmerita-btn[style*="background-color"][style*="color"] {
+  text-shadow: none;
+}
+
+/* Add subtle glow effect for custom colored buttons */
+.palmerita-btn[style*="background-color"]:hover {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 } 

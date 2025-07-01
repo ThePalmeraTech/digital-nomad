@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Digital Nomad Subscriptions
- * Plugin URI: https://palmeritaproductions.com
+ * Plugin URI: https://www.palmeratech.net
  * Description: Handles CV and promotion subscriptions with modals and database storage.
  * Version: 1.2.0
  * Author: Hanaley Mosley - Palmerita Productions
- * Author URI: https://palmeritaproductions.com
+ * Author URI: https://www.palmeratech.net
  * Text Domain: palmerita-subscriptions
  * Domain Path: /languages
  * Requires at least: 5.0
@@ -176,6 +176,17 @@ class PalmeritaSubscriptions {
                 PALMERITA_SUBS_VERSION,
                 true
             );
+            
+            // Load color enhancement script on modal copy page
+            if (strpos($hook, 'palmerita-modal-copy') !== false) {
+                wp_enqueue_script(
+                    'palmerita-subs-admin-colors',
+                    PALMERITA_SUBS_PLUGIN_URL . 'assets/js/admin-colors.js',
+                    array('jquery'),
+                    PALMERITA_SUBS_VERSION,
+                    true
+                );
+            }
         }
     }
     
@@ -414,14 +425,14 @@ class PalmeritaSubscriptions {
 
         $cfg = array_merge($defaults,$copy);
 
-        // Helper to build style
+        // Helper to build style with proper fallbacks
         $style_attr = function($bg,$txt=''){
             $css = '';
-            if($bg)  $css .= 'background-color:'.esc_attr($bg).';';
-            if($txt) $css .= 'color:'.esc_attr($txt).';';
+            if($bg && $bg !== '')  $css .= 'background-color:'.esc_attr($bg).'; background-image: none; ';
+            if($txt && $txt !== '') $css .= 'color:'.esc_attr($txt).' !important;';
             return $css ? 'style="'.$css.'"' : '';
         };
-
+        
         ob_start();
         ?>
         <div class="palmerita-subscription-buttons" data-style="<?php echo esc_attr($atts['style']); ?>">
@@ -429,7 +440,7 @@ class PalmeritaSubscriptions {
                 <?php if($cfg['cv_btn_icon']) : ?><span class="btn-icon"><?php echo esc_html($cfg['cv_btn_icon']); ?></span><?php endif; ?>
                 <span class="btn-text"><?php echo esc_html($cfg['cv_btn_text']); ?></span>
             </button>
-
+            
             <button type="button" class="palmerita-btn palmerita-btn-promo" data-type="promo" data-palmerita-btn="1" <?php echo $style_attr($cfg['promo_btn_color'],$cfg['promo_text_color']); ?> >
                 <?php if($cfg['promo_btn_icon']) : ?><span class="btn-icon"><?php echo esc_html($cfg['promo_btn_icon']); ?></span><?php endif; ?>
                 <span class="btn-text"><?php echo esc_html($cfg['promo_btn_text']); ?></span>
@@ -706,6 +717,155 @@ class PalmeritaSubscriptions {
             background: #0056b3;
             color: white;
         }
+        
+        /* Color palette styles */
+        .palmerita-color-palette {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e1e5e9;
+        }
+        
+        .palmerita-color-palette h5 {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: #1d2327;
+            font-weight: 600;
+        }
+        
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+        }
+        
+        .palette-item {
+            cursor: pointer;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            transition: all 0.2s ease;
+        }
+        
+        .palette-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .palette-item.palette-applied {
+            animation: pulseGreen 0.6s ease;
+        }
+        
+        .palette-preview {
+            padding: 12px 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .palette-name {
+            display: block;
+            padding: 6px 8px;
+            background: #fff;
+            font-size: 11px;
+            color: #646970;
+            text-align: center;
+        }
+        
+        @keyframes pulseGreen {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+        }
+        
+        /* Copy/Paste buttons */
+        .color-copy, .color-paste {
+            font-size: 11px !important;
+            padding: 4px 8px !important;
+            height: auto !important;
+            line-height: 1.2 !important;
+        }
+        
+        /* Harmony suggestions */
+        .harmony-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            margin-top: 4px;
+        }
+        
+        .harmony-item {
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .harmony-item:last-child {
+            border-bottom: none;
+        }
+        
+        .harmony-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .harmony-preview {
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        /* Notifications */
+        .palmerita-notification {
+            position: fixed;
+            top: 32px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            z-index: 10000;
+            transform: translateX(100%);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .palmerita-notification.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        .palmerita-notification.success {
+            background: #d1e7dd;
+            color: #0f5132;
+            border: 1px solid #badbcc;
+        }
+        
+        .palmerita-notification.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c2c7;
+        }
+        
+        /* WCAG level indicators */
+        .contrast-indicator[data-wcag-level="AAA"] {
+            border-left: 4px solid #22c55e;
+        }
+        
+        .contrast-indicator[data-wcag-level="AA"] {
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .contrast-indicator[data-wcag-level="A"] {
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .contrast-indicator[data-wcag-level="FAIL"] {
+            border-left: 4px solid #ef4444;
+        }
         </style>
         <?php
         get_footer();
@@ -768,7 +928,7 @@ class PalmeritaSubscriptions {
         $btn_color = !empty($copy['cv_btn_color']) ? $copy['cv_btn_color'] : '';
         $btn_text_color = !empty($copy['cv_text_color']) ? $copy['cv_text_color'] : '';
 
-        $style_attr = $btn_color ? 'style="background-color:'.esc_attr($btn_color).'; color:'.esc_attr($btn_text_color).'"' : '';
+        $style_attr = ($btn_color || $btn_text_color) ? 'style="'.($btn_color ? 'background-color:'.esc_attr($btn_color).'; background-image: none; ' : '').($btn_text_color ? 'color:'.esc_attr($btn_text_color).' !important;' : '').'"' : '';
         $style_class = 'palmerita-btn--' . esc_attr($atts['style']);
         ob_start();
         ?>
@@ -777,10 +937,10 @@ class PalmeritaSubscriptions {
                 <?php if($btn_icon){ ?>
                     <span class="btn-icon"><?php echo esc_html($btn_icon); ?></span>
                 <?php } else { ?>
-                    <span class="btn-icon" aria-hidden="true">
-                        <!-- SVG: Document icon -->
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="2" width="12" height="16" rx="2" fill="currentColor" fill-opacity="0.08"/><rect x="6" y="4" width="8" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h4M8 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-                    </span>
+                <span class="btn-icon" aria-hidden="true">
+                  <!-- SVG: Document icon -->
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="2" width="12" height="16" rx="2" fill="currentColor" fill-opacity="0.08"/><rect x="6" y="4" width="8" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h4M8 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                </span>
                 <?php } ?>
                 <span class="btn-text"><?php echo esc_html($btn_text); ?></span>
             </button>
@@ -828,7 +988,7 @@ class PalmeritaSubscriptions {
         $btn_icon  = isset($copy['promo_btn_icon'])  ? $copy['promo_btn_icon']  : '';
         $btn_color = !empty($copy['promo_btn_color'])? $copy['promo_btn_color']: '';
         $btn_text_color = !empty($copy['promo_text_color']) ? $copy['promo_text_color'] : '';
-        $style_attr = $btn_color ? 'style="background-color:'.esc_attr($btn_color).'; color:'.esc_attr($btn_text_color).'"' : '';
+        $style_attr = ($btn_color || $btn_text_color) ? 'style="'.($btn_color ? 'background-color:'.esc_attr($btn_color).'; background-image: none; ' : '').($btn_text_color ? 'color:'.esc_attr($btn_text_color).' !important;' : '').'"' : '';
         $style_class = 'palmerita-btn--' . esc_attr($atts['style']);
         ob_start();
         ?>
@@ -837,10 +997,10 @@ class PalmeritaSubscriptions {
                 <?php if($btn_icon){ ?>
                     <span class="btn-icon"><?php echo esc_html($btn_icon); ?></span>
                 <?php } else { ?>
-                    <span class="btn-icon" aria-hidden="true">
-                        <!-- SVG: Target icon -->
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5" fill="currentColor" fill-opacity="0.08"/><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/></svg>
-                    </span>
+                <span class="btn-icon" aria-hidden="true">
+                  <!-- SVG: Target icon -->
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5" fill="currentColor" fill-opacity="0.08"/><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/></svg>
+                </span>
                 <?php } ?>
                 <span class="btn-text"><?php echo esc_html($btn_text); ?></span>
             </button>
@@ -1171,7 +1331,7 @@ class PalmeritaSubscriptions {
         $btn_icon  = isset($copy['file_btn_icon'])  ? $copy['file_btn_icon']  : '🛠️';
         $btn_color = !empty($copy['file_btn_color'])? $copy['file_btn_color']: '';
         $btn_text_color = !empty($copy['file_text_color']) ? $copy['file_text_color'] : '';
-        $style_attr  = $btn_color ? 'style="background-color:'.esc_attr($btn_color).'; color:'.esc_attr($btn_text_color).'"' : '';
+        $style_attr  = ($btn_color || $btn_text_color) ? 'style="'.($btn_color ? 'background-color:'.esc_attr($btn_color).'; background-image: none; ' : '').($btn_text_color ? 'color:'.esc_attr($btn_text_color).' !important;' : '').'"' : '';
         $style_class = 'palmerita-btn--' . esc_attr($atts['style']);
         $extra_class = sanitize_text_field( $atts['class'] );
         ob_start();
@@ -1232,39 +1392,615 @@ class PalmeritaSubscriptions {
         ?>
         <div class="wrap">
             <h1><?php _e('Modal Copy Settings','palmerita-subscriptions'); ?></h1>
+            <p class="description"><?php _e('Customize button appearance, modal content, and see real-time previews of your changes.','palmerita-subscriptions'); ?></p>
+            
             <form method="post" action="">
                 <?php wp_nonce_field('save_modal_copy','pal_modal_copy_nonce'); ?>
-                <table class="form-table" role="presentation"><tbody>
-                    <tr><th colspan="2"><h2><?php _e('CV Button','palmerita-subscriptions'); ?></h2></th></tr>
-                    <tr><th><label for="cv_title"><?php _e('Title','palmerita-subscriptions'); ?></label></th><td><input type="text" name="cv_title" id="cv_title" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['cv_title'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="cv_desc"><?php _e('Description','palmerita-subscriptions'); ?></label></th><td><textarea name="cv_desc" id="cv_desc" class="large-text" rows="3"><?php echo esc_textarea( wp_unslash($copy['cv_desc'] ?? '') ); ?></textarea></td></tr>
-                    <tr><th><label for="cv_btn_text"><?php _e('Button Text','palmerita-subscriptions'); ?></label></th><td><input type="text" name="cv_btn_text" id="cv_btn_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_text'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="cv_btn_icon"><?php _e('Button Icon (emoji/HTML)','palmerita-subscriptions'); ?></label></th><td><input type="text" name="cv_btn_icon" id="cv_btn_icon" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_icon'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="cv_btn_color"><?php _e('Button Color','palmerita-subscriptions'); ?></label></th><td><input type="color" name="cv_btn_color" id="cv_btn_color" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_color'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="cv_text_color"><?php _e('Text Color','palmerita-subscriptions'); ?></label></th><td><input type="color" name="cv_text_color" id="cv_text_color" value="<?php echo esc_attr( wp_unslash($copy['cv_text_color'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="cv_submit_text"><?php _e('Modal Submit Button Text','palmerita-subscriptions'); ?></label></th><td><input type="text" name="cv_submit_text" id="cv_submit_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['cv_submit_text'] ?? '') ); ?>" placeholder="<?php _e('e.g., Send CV Link','palmerita-subscriptions'); ?>" /></td></tr>
+                
+                <!-- CV Button Section -->
+                <div class="palmerita-section">
+                    <h2><?php _e('CV Button','palmerita-subscriptions'); ?></h2>
+                    <p class="description"><?php _e('Configure the button that users click to request your CV. This controls both the button appearance and the modal content.','palmerita-subscriptions'); ?></p>
+                    <div class="palmerita-admin-grid">
+                        <div class="palmerita-form-column">
+                            <table class="form-table" role="presentation">
+                                <tbody>
+                                    <tr>
+                                        <th><label for="cv_title"><?php _e('Modal Title','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="cv_title" id="cv_title" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['cv_title'] ?? '') ); ?>" placeholder="<?php _e('Get my CV','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Title shown in the popup when users click the button','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="cv_desc"><?php _e('Modal Description','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <textarea name="cv_desc" id="cv_desc" class="large-text" rows="3" placeholder="<?php _e('Enter modal description...','palmerita-subscriptions'); ?>"><?php echo esc_textarea( wp_unslash($copy['cv_desc'] ?? '') ); ?></textarea>
+                                            <p class="description"><?php _e('Description text shown in the popup','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="cv_btn_text"><?php _e('Button Text','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="cv_btn_text" id="cv_btn_text" class="regular-text btn-text-input" data-target="cv-preview" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_text'] ?? '') ); ?>" placeholder="<?php _e('Get my CV','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Text displayed on the button','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="cv_btn_icon"><?php _e('Button Icon','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="cv_btn_icon" id="cv_btn_icon" class="regular-text btn-icon-input" data-target="cv-preview" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_icon'] ?? '') ); ?>" placeholder="📄" />
+                                            <p class="description"><?php _e('Use emoji or HTML. Leave empty for default SVG icon.','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="cv_btn_color"><?php _e('Background Color','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <div class="palmerita-color-group">
+                                                <input type="color" name="cv_btn_color" id="cv_btn_color" class="btn-bg-color" data-target="cv-preview" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_color'] ?? '#6366f1') ); ?>" />
+                                                <input type="text" class="color-hex-input" data-color-input="cv_btn_color" value="<?php echo esc_attr( wp_unslash($copy['cv_btn_color'] ?? '#6366f1') ); ?>" placeholder="#6366f1" />
+                                                <button type="button" class="button color-reset" data-target="cv_btn_color" data-default="#6366f1"><?php _e('Reset','palmerita-subscriptions'); ?></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="cv_text_color"><?php _e('Text Color','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <div class="palmerita-color-group">
+                                                <input type="color" name="cv_text_color" id="cv_text_color" class="btn-text-color" data-target="cv-preview" value="<?php echo esc_attr( wp_unslash($copy['cv_text_color'] ?? '#ffffff') ); ?>" />
+                                                <input type="text" class="color-hex-input" data-color-input="cv_text_color" value="<?php echo esc_attr( wp_unslash($copy['cv_text_color'] ?? '#ffffff') ); ?>" placeholder="#ffffff" />
+                                                <button type="button" class="button color-reset" data-target="cv_text_color" data-default="#ffffff"><?php _e('Reset','palmerita-subscriptions'); ?></button>
+                                            </div>
+                                            <div class="contrast-indicator" id="cv-contrast"></div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="cv_submit_text"><?php _e('Submit Button Text','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="cv_submit_text" id="cv_submit_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['cv_submit_text'] ?? '') ); ?>" placeholder="<?php _e('Send CV Link','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Text for the submit button inside the modal','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="palmerita-preview-column">
+                            <div class="palmerita-preview-container">
+                                <h3><?php _e('Live Preview','palmerita-subscriptions'); ?></h3>
+                                <div class="palmerita-preview-button-container">
+                                    <button type="button" id="cv-preview" class="palmerita-btn palmerita-btn-cv" style="background-color: <?php echo esc_attr( wp_unslash($copy['cv_btn_color'] ?? '#6366f1') ); ?>; background-image: none; color: <?php echo esc_attr( wp_unslash($copy['cv_text_color'] ?? '#ffffff') ); ?>;">
+                                        <span class="btn-icon"><?php echo esc_html( wp_unslash($copy['cv_btn_icon'] ?? '📄') ); ?></span>
+                                        <span class="btn-text"><?php echo esc_html( wp_unslash($copy['cv_btn_text'] ?? 'Get my CV') ); ?></span>
+                                    </button>
+                                </div>
+                                <div class="palmerita-preview-tips">
+                                    <h4><?php _e('Design Tips','palmerita-subscriptions'); ?></h4>
+                                    <ul>
+                                        <li><?php _e('Ensure good contrast between background and text colors','palmerita-subscriptions'); ?></li>
+                                        <li><?php _e('Test on different devices and screen sizes','palmerita-subscriptions'); ?></li>
+                                        <li><?php _e('Keep text concise and action-oriented','palmerita-subscriptions'); ?></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                    <tr><th colspan="2"><h2><?php _e('Promotions Button','palmerita-subscriptions'); ?></h2></th></tr>
-                    <tr><th><label for="promo_title"><?php _e('Title','palmerita-subscriptions'); ?></label></th><td><input type="text" name="promo_title" id="promo_title" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['promo_title'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="promo_desc"><?php _e('Description','palmerita-subscriptions'); ?></label></th><td><textarea name="promo_desc" id="promo_desc" class="large-text" rows="3"><?php echo esc_textarea( wp_unslash($copy['promo_desc'] ?? '') ); ?></textarea></td></tr>
-                    <tr><th><label for="promo_btn_text"><?php _e('Button Text','palmerita-subscriptions'); ?></label></th><td><input type="text" name="promo_btn_text" id="promo_btn_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_text'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="promo_btn_icon"><?php _e('Button Icon','palmerita-subscriptions'); ?></label></th><td><input type="text" name="promo_btn_icon" id="promo_btn_icon" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_icon'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="promo_btn_color"><?php _e('Button Color','palmerita-subscriptions'); ?></label></th><td><input type="color" name="promo_btn_color" id="promo_btn_color" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_color'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="promo_text_color"><?php _e('Text Color','palmerita-subscriptions'); ?></label></th><td><input type="color" name="promo_text_color" id="promo_text_color" value="<?php echo esc_attr( wp_unslash($copy['promo_text_color'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="promo_submit_text"><?php _e('Modal Submit Button Text','palmerita-subscriptions'); ?></label></th><td><input type="text" name="promo_submit_text" id="promo_submit_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['promo_submit_text'] ?? '') ); ?>" placeholder="<?php _e('e.g., Subscribe Now','palmerita-subscriptions'); ?>" /></td></tr>
+                <!-- Promo Button Section -->
+                <div class="palmerita-section">
+                    <h2><?php _e('Promotions Button','palmerita-subscriptions'); ?></h2>
+                    <p class="description"><?php _e('Configure the button for promotional subscriptions. Users will subscribe to receive special offers and updates.','palmerita-subscriptions'); ?></p>
+                    <div class="palmerita-admin-grid">
+                        <div class="palmerita-form-column">
+                            <table class="form-table" role="presentation">
+                                <tbody>
+                                    <tr>
+                                        <th><label for="promo_title"><?php _e('Modal Title','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="promo_title" id="promo_title" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['promo_title'] ?? '') ); ?>" placeholder="<?php _e('Get Special Offers','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Title shown in the popup when users click the button','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="promo_desc"><?php _e('Modal Description','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <textarea name="promo_desc" id="promo_desc" class="large-text" rows="3" placeholder="<?php _e('Enter modal description...','palmerita-subscriptions'); ?>"><?php echo esc_textarea( wp_unslash($copy['promo_desc'] ?? '') ); ?></textarea>
+                                            <p class="description"><?php _e('Description text shown in the popup','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="promo_btn_text"><?php _e('Button Text','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="promo_btn_text" id="promo_btn_text" class="regular-text btn-text-input" data-target="promo-preview" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_text'] ?? '') ); ?>" placeholder="<?php _e('Get Offers','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Text displayed on the button','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="promo_btn_icon"><?php _e('Button Icon','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="promo_btn_icon" id="promo_btn_icon" class="regular-text btn-icon-input" data-target="promo-preview" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_icon'] ?? '') ); ?>" placeholder="🎯" />
+                                            <p class="description"><?php _e('Use emoji or HTML. Leave empty for default SVG icon.','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="promo_btn_color"><?php _e('Background Color','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <div class="palmerita-color-group">
+                                                <input type="color" name="promo_btn_color" id="promo_btn_color" class="btn-bg-color" data-target="promo-preview" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_color'] ?? '#f59e0b') ); ?>" />
+                                                <input type="text" class="color-hex-input" data-color-input="promo_btn_color" value="<?php echo esc_attr( wp_unslash($copy['promo_btn_color'] ?? '#f59e0b') ); ?>" placeholder="#f59e0b" />
+                                                <button type="button" class="button color-reset" data-target="promo_btn_color" data-default="#f59e0b"><?php _e('Reset','palmerita-subscriptions'); ?></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="promo_text_color"><?php _e('Text Color','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <div class="palmerita-color-group">
+                                                <input type="color" name="promo_text_color" id="promo_text_color" class="btn-text-color" data-target="promo-preview" value="<?php echo esc_attr( wp_unslash($copy['promo_text_color'] ?? '#ffffff') ); ?>" />
+                                                <input type="text" class="color-hex-input" data-color-input="promo_text_color" value="<?php echo esc_attr( wp_unslash($copy['promo_text_color'] ?? '#ffffff') ); ?>" placeholder="#ffffff" />
+                                                <button type="button" class="button color-reset" data-target="promo_text_color" data-default="#ffffff"><?php _e('Reset','palmerita-subscriptions'); ?></button>
+                                            </div>
+                                            <div class="contrast-indicator" id="promo-contrast"></div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="promo_submit_text"><?php _e('Submit Button Text','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="promo_submit_text" id="promo_submit_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['promo_submit_text'] ?? '') ); ?>" placeholder="<?php _e('Subscribe Now','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Text for the submit button inside the modal','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="palmerita-preview-column">
+                            <div class="palmerita-preview-container">
+                                <h3><?php _e('Live Preview','palmerita-subscriptions'); ?></h3>
+                                <div class="palmerita-preview-button-container">
+                                    <button type="button" id="promo-preview" class="palmerita-btn palmerita-btn-promo" style="background-color: <?php echo esc_attr( wp_unslash($copy['promo_btn_color'] ?? '#f59e0b') ); ?>; background-image: none; color: <?php echo esc_attr( wp_unslash($copy['promo_text_color'] ?? '#ffffff') ); ?>;">
+                                        <span class="btn-icon"><?php echo esc_html( wp_unslash($copy['promo_btn_icon'] ?? '🎯') ); ?></span>
+                                        <span class="btn-text"><?php echo esc_html( wp_unslash($copy['promo_btn_text'] ?? 'Get Offers') ); ?></span>
+                                    </button>
+                                </div>
+                                <div class="palmerita-preview-tips">
+                                    <h4><?php _e('Design Tips','palmerita-subscriptions'); ?></h4>
+                                    <ul>
+                                        <li><?php _e('Use attention-grabbing colors for promotional content','palmerita-subscriptions'); ?></li>
+                                        <li><?php _e('Make the call-to-action clear and compelling','palmerita-subscriptions'); ?></li>
+                                        <li><?php _e('Consider seasonal or brand-specific colors','palmerita-subscriptions'); ?></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                    <tr><th colspan="2"><h2><?php _e('File Button','palmerita-subscriptions'); ?></h2></th></tr>
-                    <tr><th><label for="file_title"><?php _e('Title','palmerita-subscriptions'); ?></label></th><td><input type="text" name="file_title" id="file_title" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['file_title'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="file_desc"><?php _e('Description','palmerita-subscriptions'); ?></label></th><td><textarea name="file_desc" id="file_desc" class="large-text" rows="3"><?php echo esc_textarea( wp_unslash($copy['file_desc'] ?? '') ); ?></textarea></td></tr>
-                    <tr><th><label for="file_btn_text"><?php _e('Button Text','palmerita-subscriptions'); ?></label></th><td><input type="text" name="file_btn_text" id="file_btn_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['file_btn_text'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="file_btn_icon"><?php _e('Button Icon','palmerita-subscriptions'); ?></label></th><td><input type="text" name="file_btn_icon" id="file_btn_icon" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['file_btn_icon'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="file_btn_color"><?php _e('Button Color','palmerita-subscriptions'); ?></label></th><td><input type="color" name="file_btn_color" id="file_btn_color" value="<?php echo esc_attr( wp_unslash($copy['file_btn_color'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="file_text_color"><?php _e('Text Color','palmerita-subscriptions'); ?></label></th><td><input type="color" name="file_text_color" id="file_text_color" value="<?php echo esc_attr( wp_unslash($copy['file_text_color'] ?? '') ); ?>" /></td></tr>
-                    <tr><th><label for="file_submit_text"><?php _e('Modal Submit Button Text','palmerita-subscriptions'); ?></label></th><td><input type="text" name="file_submit_text" id="file_submit_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['file_submit_text'] ?? '') ); ?>" placeholder="<?php _e('e.g., Get Download Link','palmerita-subscriptions'); ?>" /></td></tr>
-                </tbody></table>
-                <?php submit_button(); ?>
+                <!-- File Button Section -->
+                <div class="palmerita-section">
+                    <h2><?php _e('File Download Button','palmerita-subscriptions'); ?></h2>
+                    <p class="description"><?php _e('Configure the button for file downloads. Users will receive download links for your files or plugins.','palmerita-subscriptions'); ?></p>
+                    <div class="palmerita-admin-grid">
+                        <div class="palmerita-form-column">
+                            <table class="form-table" role="presentation">
+                                <tbody>
+                                    <tr>
+                                        <th><label for="file_title"><?php _e('Modal Title','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="file_title" id="file_title" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['file_title'] ?? '') ); ?>" placeholder="<?php _e('Download File','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Title shown in the popup when users click the button','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="file_desc"><?php _e('Modal Description','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <textarea name="file_desc" id="file_desc" class="large-text" rows="3" placeholder="<?php _e('Enter modal description...','palmerita-subscriptions'); ?>"><?php echo esc_textarea( wp_unslash($copy['file_desc'] ?? '') ); ?></textarea>
+                                            <p class="description"><?php _e('Description text shown in the popup','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="file_btn_text"><?php _e('Button Text','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="file_btn_text" id="file_btn_text" class="regular-text btn-text-input" data-target="file-preview" value="<?php echo esc_attr( wp_unslash($copy['file_btn_text'] ?? '') ); ?>" placeholder="<?php _e('Download File','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Text displayed on the button','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="file_btn_icon"><?php _e('Button Icon','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="file_btn_icon" id="file_btn_icon" class="regular-text btn-icon-input" data-target="file-preview" value="<?php echo esc_attr( wp_unslash($copy['file_btn_icon'] ?? '') ); ?>" placeholder="🛠️" />
+                                            <p class="description"><?php _e('Use emoji or HTML. Leave empty for default SVG icon.','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="file_btn_color"><?php _e('Background Color','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <div class="palmerita-color-group">
+                                                <input type="color" name="file_btn_color" id="file_btn_color" class="btn-bg-color" data-target="file-preview" value="<?php echo esc_attr( wp_unslash($copy['file_btn_color'] ?? '#10b981') ); ?>" />
+                                                <input type="text" class="color-hex-input" data-color-input="file_btn_color" value="<?php echo esc_attr( wp_unslash($copy['file_btn_color'] ?? '#10b981') ); ?>" placeholder="#10b981" />
+                                                <button type="button" class="button color-reset" data-target="file_btn_color" data-default="#10b981"><?php _e('Reset','palmerita-subscriptions'); ?></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="file_text_color"><?php _e('Text Color','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <div class="palmerita-color-group">
+                                                <input type="color" name="file_text_color" id="file_text_color" class="btn-text-color" data-target="file-preview" value="<?php echo esc_attr( wp_unslash($copy['file_text_color'] ?? '#ffffff') ); ?>" />
+                                                <input type="text" class="color-hex-input" data-color-input="file_text_color" value="<?php echo esc_attr( wp_unslash($copy['file_text_color'] ?? '#ffffff') ); ?>" placeholder="#ffffff" />
+                                                <button type="button" class="button color-reset" data-target="file_text_color" data-default="#ffffff"><?php _e('Reset','palmerita-subscriptions'); ?></button>
+                                            </div>
+                                            <div class="contrast-indicator" id="file-contrast"></div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th><label for="file_submit_text"><?php _e('Submit Button Text','palmerita-subscriptions'); ?></label></th>
+                                        <td>
+                                            <input type="text" name="file_submit_text" id="file_submit_text" class="regular-text" value="<?php echo esc_attr( wp_unslash($copy['file_submit_text'] ?? '') ); ?>" placeholder="<?php _e('Get Download Link','palmerita-subscriptions'); ?>" />
+                                            <p class="description"><?php _e('Text for the submit button inside the modal','palmerita-subscriptions'); ?></p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="palmerita-preview-column">
+                            <div class="palmerita-preview-container">
+                                <h3><?php _e('Live Preview','palmerita-subscriptions'); ?></h3>
+                                <div class="palmerita-preview-button-container">
+                                    <button type="button" id="file-preview" class="palmerita-btn palmerita-btn-file" style="background-color: <?php echo esc_attr( wp_unslash($copy['file_btn_color'] ?? '#10b981') ); ?>; background-image: none; color: <?php echo esc_attr( wp_unslash($copy['file_text_color'] ?? '#ffffff') ); ?>;">
+                                        <span class="btn-icon"><?php echo esc_html( wp_unslash($copy['file_btn_icon'] ?? '🛠️') ); ?></span>
+                                        <span class="btn-text"><?php echo esc_html( wp_unslash($copy['file_btn_text'] ?? 'Download File') ); ?></span>
+                                    </button>
+                                </div>
+                                <div class="palmerita-preview-tips">
+                                    <h4><?php _e('Design Tips','palmerita-subscriptions'); ?></h4>
+                                    <ul>
+                                        <li><?php _e('Use professional colors that inspire trust','palmerita-subscriptions'); ?></li>
+                                        <li><?php _e('Make the download purpose clear in the button text','palmerita-subscriptions'); ?></li>
+                                        <li><?php _e('Consider using icons that represent the file type','palmerita-subscriptions'); ?></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <?php submit_button(__('Save Changes','palmerita-subscriptions'), 'primary', 'submit', true, array('class' => 'palmerita-save-btn')); ?>
             </form>
         </div>
+
+        <style>
+        .palmerita-section {
+            background: #fff;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .palmerita-section h2 {
+            color: #1d2327;
+            font-size: 18px;
+            margin: 0 0 8px 0;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f1;
+        }
+        
+        .palmerita-section .description {
+            margin-bottom: 20px;
+            color: #646970;
+        }
+        
+        .palmerita-admin-grid {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 30px;
+            align-items: start;
+        }
+        
+        .palmerita-form-column .form-table th {
+            width: 180px;
+            font-weight: 600;
+            color: #1d2327;
+        }
+        
+        .palmerita-color-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .palmerita-color-group input[type="color"] {
+            width: 50px;
+            height: 40px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 0;
+        }
+        
+        .color-hex-input {
+            width: 100px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        
+        .color-reset {
+            font-size: 12px;
+            padding: 6px 12px;
+        }
+        
+        .palmerita-preview-container {
+            background: #f8f9fa;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 20px;
+            position: sticky;
+            top: 32px;
+        }
+        
+        .palmerita-preview-container h3 {
+            margin: 0 0 16px 0;
+            color: #1d2327;
+            font-size: 16px;
+        }
+        
+        .palmerita-preview-button-container {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            background: #fff;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 2px dashed #ddd;
+        }
+        
+        .palmerita-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .palmerita-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .palmerita-btn .btn-icon {
+            font-size: 16px;
+        }
+        
+        .palmerita-btn .btn-text {
+            font-size: 14px;
+        }
+        
+        .palmerita-preview-tips {
+            background: #fff;
+            padding: 16px;
+            border-radius: 6px;
+            border-left: 4px solid #2271b1;
+        }
+        
+        .palmerita-preview-tips h4 {
+            margin: 0 0 12px 0;
+            color: #1d2327;
+            font-size: 14px;
+        }
+        
+        .palmerita-preview-tips ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .palmerita-preview-tips li {
+            font-size: 13px;
+            color: #646970;
+            margin-bottom: 6px;
+        }
+        
+        .contrast-indicator {
+            margin-top: 8px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .contrast-good {
+            background: #d1e7dd;
+            color: #0f5132;
+            border: 1px solid #badbcc;
+        }
+        
+        .contrast-poor {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c2c7;
+        }
+        
+        .palmerita-save-btn {
+            background: linear-gradient(135deg, #2271b1, #135e96) !important;
+            border-color: #135e96 !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            font-size: 14px !important;
+            padding: 12px 24px !important;
+            height: auto !important;
+        }
+        
+        @media (max-width: 1200px) {
+            .palmerita-admin-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .palmerita-preview-container {
+                position: static;
+            }
+        }
+        </style>
+
+        <script>
+        jQuery(document).ready(function($) {
+            // Función para calcular contraste
+            function calculateContrast(bg, text) {
+                function hexToRgb(hex) {
+                    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                    return result ? {
+                        r: parseInt(result[1], 16),
+                        g: parseInt(result[2], 16),
+                        b: parseInt(result[3], 16)
+                    } : null;
+                }
+                
+                function luminance(r, g, b) {
+                    const [rs, gs, bs] = [r, g, b].map(c => {
+                        c = c / 255;
+                        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+                    });
+                    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+                }
+                
+                const bgRgb = hexToRgb(bg);
+                const textRgb = hexToRgb(text);
+                
+                if (!bgRgb || !textRgb) return 1;
+                
+                const bgLum = luminance(bgRgb.r, bgRgb.g, bgRgb.b);
+                const textLum = luminance(textRgb.r, textRgb.g, textRgb.b);
+                
+                const brightest = Math.max(bgLum, textLum);
+                const darkest = Math.min(bgLum, textLum);
+                
+                return (brightest + 0.05) / (darkest + 0.05);
+            }
+            
+            // Función para actualizar indicador de contraste
+            function updateContrastIndicator(bgColor, textColor, targetId) {
+                const contrast = calculateContrast(bgColor, textColor);
+                const indicator = $('#' + targetId + '-contrast');
+                
+                indicator.removeClass('contrast-good contrast-poor');
+                
+                if (contrast >= 4.5) {
+                    indicator.addClass('contrast-good');
+                    indicator.text('✓ Buen contraste (WCAG AA: ' + contrast.toFixed(1) + ':1)');
+                } else {
+                    indicator.addClass('contrast-poor');
+                    indicator.text('⚠ Contraste bajo (WCAG AA: ' + contrast.toFixed(1) + ':1)');
+                }
+            }
+            
+            // Función para actualizar vista previa
+            function updatePreview(target, property, value) {
+                const preview = $('#' + target);
+                if (property === 'background-color') {
+                    preview.css({
+                        'background-color': value,
+                        'background-image': 'none'
+                    });
+                    const textColor = preview.css('color');
+                    updateContrastIndicator(value, textColor, target.replace('-preview', ''));
+                } else if (property === 'color') {
+                    preview.css('color', value);
+                    const bgColor = preview.css('background-color');
+                    // Convertir rgb a hex para el cálculo
+                    const rgb = bgColor.match(/\d+/g);
+                    if (rgb) {
+                        const hex = '#' + rgb.map(x => (+x).toString(16).padStart(2, '0')).join('');
+                        updateContrastIndicator(hex, value, target.replace('-preview', ''));
+                    }
+                }
+            }
+            
+            // Event listeners para colores
+            $('.btn-bg-color').on('input change', function() {
+                const target = $(this).data('target');
+                const color = $(this).val();
+                updatePreview(target, 'background-color', color);
+                
+                // Sincronizar con input de texto
+                $('[data-color-input="' + $(this).attr('id') + '"]').val(color);
+            });
+            
+            $('.btn-text-color').on('input change', function() {
+                const target = $(this).data('target');
+                const color = $(this).val();
+                updatePreview(target, 'color', color);
+                
+                // Sincronizar con input de texto
+                $('[data-color-input="' + $(this).attr('id') + '"]').val(color);
+            });
+            
+            // Event listeners para inputs de texto
+            $('.btn-text-input').on('input', function() {
+                const target = $(this).data('target');
+                const text = $(this).val() || $(this).attr('placeholder');
+                $('#' + target).find('.btn-text').text(text);
+            });
+            
+            $('.btn-icon-input').on('input', function() {
+                const target = $(this).data('target');
+                const icon = $(this).val();
+                $('#' + target).find('.btn-icon').html(icon);
+            });
+            
+            // Event listeners para inputs hex
+            $('.color-hex-input').on('input', function() {
+                const targetId = $(this).data('color-input');
+                const color = $(this).val();
+                if (/^#[0-9A-F]{6}$/i.test(color)) {
+                    $('#' + targetId).val(color).trigger('change');
+                }
+            });
+            
+            // Event listeners para botones reset
+            $('.color-reset').on('click', function() {
+                const targetId = $(this).data('target');
+                const defaultColor = $(this).data('default');
+                $('#' + targetId).val(defaultColor).trigger('change');
+                $('[data-color-input="' + targetId + '"]').val(defaultColor);
+            });
+            
+            // Inicializar indicadores de contraste para todos los botones
+            function initializeContrastIndicators() {
+                const buttons = ['cv', 'promo', 'file'];
+                
+                buttons.forEach(function(type) {
+                    const preview = $('#' + type + '-preview');
+                    if (preview.length) {
+                        const bgColor = preview.css('background-color');
+                        const textColor = preview.css('color');
+                        
+                        // Convertir rgb a hex
+                        const bgRgb = bgColor.match(/\d+/g);
+                        const textRgb = textColor.match(/\d+/g);
+                        
+                        if (bgRgb && textRgb) {
+                            const bgHex = '#' + bgRgb.map(x => (+x).toString(16).padStart(2, '0')).join('');
+                            const textHex = '#' + textRgb.map(x => (+x).toString(16).padStart(2, '0')).join('');
+                            updateContrastIndicator(bgHex, textHex, type);
+                        }
+                    }
+                });
+            }
+            
+            // Inicializar al cargar la página
+            initializeContrastIndicators();
+        });
+        </script>
         <?php
     }
 }
